@@ -30,3 +30,5 @@ runs/_scratch/
 
 AI_Recipe_Assignment.md
 AI_Recipe_Assignment_EN.pdf
+# Browser automation output
+.playwright-mcp/

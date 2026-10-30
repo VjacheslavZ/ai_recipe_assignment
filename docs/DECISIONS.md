@@ -195,3 +195,11 @@ Date: 2026-10-30 · Status: Accepted
 - **Alternatives:** BullMQ/Redis; drizzle-kit migrations; an `assets` table.
 - **Consequences:** No extra infrastructure. While a run waits for an answer the queue is blocked, which suits a single-user tool; a multi-user product would need per-run concurrency and persisted questions.
 
+## ADR-024 — Web UI: one "proofing desk" app on top of the server API
+Date: 2026-10-30 · Status: Accepted
+
+- **Context:** The UI has to start runs, show progress, take answers to price questions and present the posts for approval. It is an internal tool for one marketer, so it should stay small and show the posts the way the audience will see them.
+- **Decision:** One React page with hash routes (`#/`, `#/runs/:id`), no router or state library. A run subscribes to the SSE stream; a reducer applies events, and a `revision` counter bumps when a stage finishes so tabs refetch their artifacts. Stage outputs are shown by rendering the markdown files the pipeline already writes (`analysis.md`, `plan.md`, `review.md`), so CLI and UI read the same artifacts. Posts are shown in phone frames with a scroll-snap carousel, QA score per slide, Croatian/English caption and fact-check result. The visual style is a neutral grey desk with paper panels, so any brand palette reads true; red is used only for things a human must check (questions, failed QA, "check before publishing").
+- **Alternatives:** React Router + TanStack Query; dedicated React views for each JSON artifact; polling instead of SSE.
+- **Consequences:** Few dependencies (`marked` only) and one source of truth for stage output. Markdown is rendered as HTML without sanitising because it comes from the app's own pipeline; if users could edit artifacts, it would need sanitising. Log lines are live only, not stored.
+

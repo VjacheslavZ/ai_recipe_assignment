@@ -201,10 +201,12 @@ _Status 2026-10-30:_ scores for every slide ✅; regeneration of a failing slide
 
 ### M6 — Web: 3 screens + cost view · est. 30 min
 
-- [ ] New run form + uploads + "Load example"
-- [ ] Run view with SSE statuses, stage output viewers, "Rerun from here"
-- [ ] Posts gallery with carousel, caption, goal/rationale, QA, ZIP
-- [ ] Cost & time panel
+- [x] New run form + uploads + "Load example"
+- [x] Run view with SSE statuses, stage output viewers, "Rerun from here", price question card (ADR-024)
+- [x] Posts gallery with carousel, caption, goal/rationale, QA, ZIP
+- [x] Cost & time panel
+
+Checked in the browser with mock AI (2026-10-30): run started from the form with uploaded logo and product photos, price question answered in the UI, posts, analysis and costs viewed, posts.zip offered; desktop and 390 px phone width.
 
 **Done when:** a run can be started, watched and downloaded entirely from the browser.
 
