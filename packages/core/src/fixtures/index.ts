@@ -9,6 +9,7 @@
 import type { MockFixtures, Source } from '../ai/types.js';
 import type { InstagramAnalysisModel, SiteAnalysisModel } from '../schemas/analysis.js';
 import type { ContentPlanModel } from '../schemas/plan.js';
+import type { CaptionReviewModel, SlideReviewModel } from '../schemas/review.js';
 
 const HOME = 'https://gymbeam.hr/';
 const EVIDENCE = '[MOCK] placeholder evidence — a live run replaces this with a quote from the page';
@@ -171,8 +172,29 @@ export const planFixture = {
   ],
 } satisfies ContentPlanModel;
 
+const ok = (reason: string) => ({ score: 5, reason: `[MOCK] ${reason}` });
+
+/** Every slide passes the mock QA; tests override this fixture to exercise regeneration. */
+export const slideReviewFixture = {
+  brandFit: ok('Palette and mood match the analysis.'),
+  readability: ok('White headline on a darkened area, large enough at phone size.'),
+  productAccuracy: ok('Product is the composited reference photo.'),
+  goalFit: ok('Supports the slide role.'),
+  textCorrectness: ok('Text matches the plan, diacritics correct.'),
+  issues: [],
+  backgroundFix: null,
+} satisfies SlideReviewModel;
+
+export const captionReviewFixture = {
+  claims: [],
+  languageIssues: [],
+  verdict: 'ok',
+} satisfies CaptionReviewModel;
+
 export const mockFixtures: MockFixtures = {
   'analysis.site': { ...siteFixture, __sources: siteFixtureSources },
   'analysis.instagram': instagramFixture,
   plan: planFixture,
+  'review.slide': slideReviewFixture,
+  'review.caption': captionReviewFixture,
 };
