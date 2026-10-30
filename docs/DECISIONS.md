@@ -187,3 +187,11 @@ Date: 2026-10-30 · Status: Accepted
 - **Alternatives:** Regenerate the whole post; let the model rewrite captions; a second model as judge only.
 - **Consequences:** Regeneration only touches the background, so it cannot fix copy or layout problems (those need a plan/compose change → REFINEMENTS). QA cost is one vision call per slide per attempt plus one text call per caption.
 
+## ADR-023 — Server: SQLite index + in-process queue, bootstrap DDL, human answers over the API
+Date: 2026-10-30 · Status: Accepted
+
+- **Context:** The web UI needs run lists, live progress and a way to answer price questions; the pipeline already keeps artifacts in `runs/<runId>/`.
+- **Decision:** SQLite (Drizzle, better-sqlite3) stores `runs`, `steps` (status history), `jobs` and `ai_calls`; artifacts stay in files. Tables are created by bootstrap DDL on start rather than drizzle-kit migrations: one file to read, nothing to run by hand. A single in-process worker polls `jobs`, claims one with a conditional update, runs the core pipeline and publishes events; jobs left `running` after a crash are requeued on boot. One job at a time, because runs are long and rate-limited. Failed runs are not retried automatically: AI calls retry internally, and a failed stage usually needs a human fix, so reruns go through `POST /api/runs/:id/rerun`. Price questions (ADR-018) become `question` events; the stage waits for `POST /api/runs/:id/answers` (10 min timeout → price omitted). Uploads sent with `POST /api/runs` go into a per-run brand kit copy, so runs never change the repo's brand kit. Files are served only from inside the run folder.
+- **Alternatives:** BullMQ/Redis; drizzle-kit migrations; an `assets` table.
+- **Consequences:** No extra infrastructure. While a run waits for an answer the queue is blocked, which suits a single-user tool; a multi-user product would need per-run concurrency and persisted questions.
+

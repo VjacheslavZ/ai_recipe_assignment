@@ -190,12 +190,12 @@ Estimates are the **author's active time**; waiting time (Claude Code writing co
 
 _Status 2026-10-30:_ scores for every slide ✅; regeneration of a failing slide ✅ in a unit test with a simulated low QA verdict (a real low-contrast slide judged by the vision model still to be checked with the key); cost report = `ai_calls` ✅ (21 calls, tokens equal) on a mock run.
 
-### M5 — Server: SQLite, queue, API, SSE · est. 20 min
+### M5 — Server: SQLite, queue, API, SSE · est. 20 min · **DONE in mock mode (2026-10-30)**
 
-- [ ] Drizzle schema + migrations for `runs`, `steps`, `jobs`, `ai_calls`, `assets`
-- [ ] Job worker (poll loop, lock, retry, requeue stale on boot)
-- [ ] Routes from §5; SSE event bus
-- [ ] Server reuses core stages; persists `ai_calls` from `onAiCall`
+- [x] Drizzle schema for `runs`, `steps`, `jobs`, `ai_calls` with bootstrap DDL on start instead of migrations (ADR-023); `assets` dropped — uploads live in the run's own brand kit folder
+- [x] Job worker (poll loop, conditional-update lock, requeue stale on boot); no automatic retry of failed runs — rerun via API (ADR-023)
+- [x] Routes from §5 (except single-slide regenerate and `/api/assets`: uploads go with `POST /api/runs`), plus `/api/example-brief` and `/api/runs/:id/answers` for price questions; SSE event bus
+- [x] Server reuses core stages; persists `ai_calls` from `onAiCall`; 5 API tests (end-to-end run, path traversal, SSE events + human answer, stale requeue, rerun)
 
 **Done when:** `POST /api/runs` with example brief completes all stages; killing the server mid-run and restarting resumes from the last succeeded step; SSE stream shows step events.
 
