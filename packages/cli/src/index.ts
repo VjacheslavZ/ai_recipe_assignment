@@ -31,6 +31,8 @@ Options for "run":
                       Default: the first step that is not done yet
   --to-step <n>       Stop after step n (default: ${STAGES.length})
   --run-id <id>       Existing run id to resume (folder name under RUNS_DIR)
+  --answer <id=value> Answer a question up front, e.g. --answer price:gymbeam-true-whey-protein=29.90
+                      (repeatable; an empty value leaves the price out). Useful when stdin is not a terminal
   --yes               Non-interactive: never prompt, unanswered questions stay unanswered
   -h, --help          Show this help
 `;
@@ -49,20 +51,43 @@ function brandSlugOf(brief: unknown): string {
   return typeof slug === 'string' && slug.trim() ? slug : 'brand';
 }
 
-function makeAsk(interactive: boolean): (q: PendingQuestion) => Promise<string | null> {
-  if (!interactive) return async () => null;
+function parseAnswers(raw: string[]): Map<string, string> {
+  const answers = new Map<string, string>();
+  for (const item of raw) {
+    const eq = item.indexOf('=');
+    if (eq < 1) throw new Error(`--answer must look like <questionId>=<value>, got "${item}"`);
+    answers.set(item.slice(0, eq).trim(), item.slice(eq + 1).trim());
+  }
+  return answers;
+}
+
+function makeAsk(interactive: boolean, answers: Map<string, string>): (q: PendingQuestion) => Promise<string | null> {
   return async (q) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    try {
-      console.log(`\n? ${q.question}`);
-      if (q.context) console.log(`  ${q.context}`);
-      const hint = q.suggestedAnswer ? ` [${q.suggestedAnswer}]` : '';
-      const answer = (await rl.question(`  answer${hint} (empty = skip): `)).trim();
-      return answer || q.suggestedAnswer || null;
-    } finally {
-      rl.close();
+    if (answers.has(q.id)) {
+      const given = answers.get(q.id)!;
+      console.log(`  answered from --answer: ${q.id}=${given || '(empty, left out)'}`);
+      return given || null;
     }
+    if (!interactive) {
+      console.log(`  unanswered question ${q.id}: ${q.question}${q.context ? ` (${q.context})` : ''}`);
+      console.log(`    to answer it, re-run this step with --answer ${q.id}=<value>`);
+      return null;
+    }
+    return promptUser(q);
   };
+}
+
+async function promptUser(q: PendingQuestion): Promise<string | null> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    console.log(`\n? ${q.question}`);
+    if (q.context) console.log(`  ${q.context}`);
+    const hint = q.suggestedAnswer ? ` [${q.suggestedAnswer}]` : '';
+    const answer = (await rl.question(`  answer${hint} (empty = skip): `)).trim();
+    return answer || q.suggestedAnswer || null;
+  } finally {
+    rl.close();
+  }
 }
 
 function printCostSummary(report: CostReport): void {
@@ -77,7 +102,7 @@ function printCostSummary(report: CostReport): void {
   }
 }
 
-async function run(values: Record<string, string | boolean | undefined>): Promise<void> {
+async function run(values: Record<string, string | boolean | string[] | undefined>): Promise<void> {
   const fromStep = parseStep('--from-step', values['from-step'] as string | undefined);
   const toStep = parseStep('--to-step', values['to-step'] as string | undefined);
   const runId = values['run-id'] as string | undefined;
@@ -108,6 +133,7 @@ async function run(values: Record<string, string | boolean | undefined>): Promis
   });
 
   const interactive = !values.yes && process.stdin.isTTY === true;
+  const answers = parseAnswers((values.answer as string[] | undefined) ?? []);
   try {
     await runPipeline({
       stages,
@@ -116,7 +142,7 @@ async function run(values: Record<string, string | boolean | undefined>): Promis
       ai,
       fromStep,
       toStep,
-      ask: makeAsk(interactive),
+      ask: makeAsk(interactive, answers),
       log: (msg) => console.log(`  ${msg}`),
     });
   } finally {
@@ -134,6 +160,7 @@ async function main(): Promise<void> {
       'from-step': { type: 'string' },
       'to-step': { type: 'string' },
       'run-id': { type: 'string' },
+      answer: { type: 'string', multiple: true },
       yes: { type: 'boolean', short: 'y' },
       help: { type: 'boolean', short: 'h' },
     },
