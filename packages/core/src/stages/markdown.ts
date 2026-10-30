@@ -145,3 +145,35 @@ ${plan.summary}
 
 ${posts.join('\n')}${fixes.length ? `\n## Automatic fixes applied during validation\n${list(fixes)}\n` : ''}`;
 }
+
+/** `04_create/POSTS.md`: the finished posts 1–3 with slides in order, format, goal, rationale and copy. */
+export function renderPostsMd(
+  plan: ContentPlan,
+  captions: { post: number; slides: string[]; instagramText: string; captionEn: string }[],
+): string {
+  const posts = plan.posts.map((p) => {
+    const c = captions.find((x) => x.post === p.number);
+    const slides = (c?.slides ?? []).map((file, i) => `![Post ${p.number} — slide ${i + 1}](${file})`).join('\n');
+    return `## Post ${p.number} — ${p.format} · ${p.goal}
+
+**Concept:** ${p.concept}
+
+**Why it fits the brand:** ${p.rationale}
+
+${slides}
+
+### Caption (HR, ready to paste)
+\`\`\`
+${c?.instagramText ?? p.captionHr}
+\`\`\`
+
+### English gloss
+${p.captionEn}
+`;
+  });
+  return `# Finished posts
+
+${plan.summary}
+
+${posts.join('\n')}`;
+}

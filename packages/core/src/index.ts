@@ -34,5 +34,9 @@ export {
   renderAnalysisMd,
   renderBriefMd,
   renderPlanMd,
+  renderPostsMd,
+  DEFAULT_FONT,
+  buildInstagramText,
 } from './stages/index.js';
-export type { MergeInput } from './stages/index.js';
+export type { MergeInput, CaptionRecord, ImagePromptRecord } from './stages/index.js';
+export * from './compose/compose.js';

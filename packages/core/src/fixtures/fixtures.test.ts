@@ -63,9 +63,8 @@ describe('stages 01–03 end to end with fixtures', () => {
     expect(readFileSync(ctx.store.path('plan', 'plan.md'), 'utf8')).toMatch(/## Post 1 — carousel · education/);
   });
 
-  it('placeholder stages throw a clear error', async () => {
+  it('the review placeholder throws a clear error', async () => {
     const ctx = makeContext({ ai: fakeAi({}), brandKitDir: tempDir('kit') });
-    await expect(stages[3]!.run(ctx)).rejects.toThrow('Stage "create" is implemented in M3');
     await expect(stages[4]!.run(ctx)).rejects.toThrow('Stage "review" is implemented in M4');
   });
 });

@@ -2,6 +2,7 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import sharp from 'sharp';
 import type { AiCallRecord, AiClient, StructuredRequest } from '../ai/types.js';
 import { parseConfig } from '../config.js';
 import type { PendingQuestion, StageContext } from '../pipeline/types.js';
@@ -21,8 +22,10 @@ export function fakeAi(fixtures: Record<string, unknown>): AiClient & { requests
       const { __sources, ...rest } = fixtures[req.purpose] as Record<string, unknown> & { __sources?: { url: string }[] };
       return { data: req.schema.parse(rest), sources: __sources ?? [], call: call(req.purpose) };
     },
-    async generateImage() {
-      throw new Error('not used');
+    async generateImage(req) {
+      const [width, height] = (req.size ?? '64x64').split('x').map(Number) as [number, number];
+      const png = await sharp({ create: { width, height, channels: 3, background: '#335577' } }).png().toBuffer();
+      return { png, call: { ...call(req.purpose), kind: 'image', imageCount: 1 } };
     },
   };
 }
