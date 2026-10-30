@@ -171,3 +171,11 @@ Date: 2026-10-30 · Status: Accepted
 - **Alternatives:** High-quality defaults (expensive iterations); a separate dev/prod profile file.
 - **Consequences:** Cheap iterations; README documents the final-run settings; cost_report shows the difference between test and final runs.
 
+## ADR-021 — Compose details: Pango text, flood-fill cut-out, cached backgrounds
+Date: 2026-10-30 · Status: Accepted
+
+- **Context:** Stage 04 must render Croatian copy reliably, place real packshots and keep re-runs cheap.
+- **Decision:** Text is rendered with sharp's Pango text input (word wrap at the box width, auto-fit to the box height, capped at 640 dpi ≈ 105 px headlines), so long copy shrinks instead of overflowing; headlines uppercase, white, on a radial scrim over the generated background. Canvases: 1080×1350 feed, 1080×1920 story; backgrounds are cover-cropped (`position: attention`). Packshots on white are cut out by flood-fill from the border (RF-002), get a soft shadow from their own alpha and are fitted into the layout's product box. The price badge uses the most saturated brand colour. A labelled "PRODUCT PHOTO MISSING" placeholder is drawn when the brand kit lacks a photo, and the logo is skipped (never synthesised) when missing. Backgrounds are reused when prompt, model, size and quality are unchanged (hash in `image_prompts.json`), so re-running compose costs nothing. Captions are taken from the validated plan (fact checking happens in stage 05).
+- **Alternatives:** SVG `<text>` with manual wrapping (no reliable measurement); generating text with the image model (garbled diacritics); always regenerating backgrounds.
+- **Consequences:** Font is the system `sans bold` unless a licensed brand font is added (fontconfig name), so typography differs from the brand's — noted as a limitation. Reproducible slide geometry is stored in `compose_specs.json`.
+

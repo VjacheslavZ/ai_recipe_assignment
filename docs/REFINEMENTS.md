@@ -45,3 +45,19 @@ Date: TODO · Stage/area: 04 Create · Run: TODO · Status: **planned (M3, ~30 m
 ## Entries
 
 _None yet._
+
+---
+
+## Entries
+
+### RF-002 — Product cut-out erased white areas inside the packaging
+Date: 2026-10-30 · Stage/area: 04 Create (`packages/core/src/compose/compose.ts`) · Run: mock run with a synthetic test packshot (`runs/_tmp/`, not committed) · Found by: Claude Code during visual review of composed slides
+
+- **What AI produced:** the first `cutOutWhite` made every near-white pixel transparent (global threshold), so white label text on the product became see-through.
+- **Problem observed:** on the composed slide the product label showed the background colour through the letters — a direct violation of "labels must remain accurate".
+- **Hypothesis:** a global colour threshold cannot tell studio background from white parts of the product.
+- **Change made:** flood-fill from the image border, so only white pixels connected to the edge (the studio background) are removed; feathered alpha between 225–245 for a soft edge. Test `compose.test.ts › cutOutWhite` keeps a white stripe inside the product opaque.
+- **Result:** label text stays opaque; background removed. Residual limitation: white areas that touch the product's outline (e.g. a white lid against a white background) can still be eaten — transparent PNGs from the brand are preferred.
+- **Before / After:** not kept (synthetic test asset); reproducible via the unit test.
+- **Kept in recipe?** yes.
+

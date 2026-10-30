@@ -146,15 +146,15 @@ Estimates are the **author's active time**; waiting time (Claude Code writing co
 
 ### M1 — Core: OpenAI wrapper, schemas, stages 01–03, CLI · est. 45 min · **DONE in mock mode (2026-10-30)**; real OpenAI run pending the API key
 
-- [ ] `config.ts`: env loading + validation (Zod), price table per model, `AI_PROVIDER=openai|mock`
-- [ ] `ai/mock.ts`: mock provider returning schema-valid fixtures + placeholder images (ADR-019) — all development until the key arrives runs on it
-- [ ] Price confirmation: `pending_confirmation` items from stage 02 → CLI prompt (UI form in M6) (ADR-018)
-- [ ] `ai/client.ts`: Responses API wrapper — structured output via Zod (`zodTextFormat`), retries with exponential backoff (429/5xx/timeouts), per-call timeout, logs `{model, tokens, cost, duration, purpose}` via `onAiCall`
-- [ ] Zod schemas: `Brief`, `Fact` (`status`, `source`, `evidence`), `BrandAnalysis`, `ContentPlan`, `PostPlan`, `SlidePlan`, `Review`
-- [ ] Artifact store: `runs/<id>/NN_stage/` read/write + schema validation + `state.json`
-- [ ] Stage 01 brief, stage 02 analysis (site via `web_search`, screenshots via vision), stage 03 plan
-- [ ] CLI: `pnpm recipe run --brief brief.yaml [--from-step N] [--run-id ID]`, progress output, cost summary at end
-- [ ] `brief.example.yaml` for GymBeam
+- [x] `config.ts`: env loading + validation (Zod), price table per model, `AI_PROVIDER=openai|mock`
+- [x] `ai/mock.ts`: mock provider returning schema-valid fixtures + placeholder images (ADR-019) — all development until the key arrives runs on it
+- [x] Price confirmation: `pending_confirmation` items from stage 02 → CLI prompt (UI form in M6) (ADR-018)
+- [x] `ai/openai.ts` (planned as `ai/client.ts`): Responses API wrapper — structured output via Zod (`zodTextFormat`), retries with exponential backoff (429/5xx/timeouts), per-call timeout, logs `{model, tokens, cost, duration, purpose}` via `onAiCall`
+- [x] Zod schemas: `Brief`, `Fact` (`status`, `source`, `evidence`), `BrandAnalysis`, `ContentPlan`, `PostPlan`, `SlidePlan` (`Review` moves to M4)
+- [x] Artifact store: `runs/<id>/NN_stage/` read/write + schema validation + `state.json`
+- [x] Stage 01 brief, stage 02 analysis (site via `web_search`, screenshots via vision), stage 03 plan — verified with mock provider only; first real OpenAI call pending the key
+- [x] CLI: `pnpm recipe run --brief brief.yaml [--from-step N] [--to-step N] [--run-id ID] [--yes]`, progress output, cost summary at end
+- [x] `brief.example.yaml` for GymBeam — product URLs and image file names still marked VERIFY for the author
 
 **Done when:** `pnpm recipe run --brief brief.example.yaml --to-step 3` produces valid `analysis.json` (each fact tagged, URLs present, inaccessible sources listed) and `plan.json` with 3 posts; rerun with `--from-step 3` reuses the existing analysis.
 
@@ -168,14 +168,14 @@ Estimates are the **author's active time**; waiting time (Claude Code writing co
 
 **Done when:** brief references only existing files; stage 01 registers all assets without warnings; stage 02 marks Instagram as "accessed via screenshots".
 
-### M3 — Stage 04: generation + compose → first post drafts · est. 1–1.5 h
+### M3 — Stage 04: generation + compose → first post drafts · est. 1–1.5 h · **code DONE in mock mode (2026-10-30)**; real images, visual review and RF-001 experiment pending the API key and brand kit
 
-- [ ] Background prompt builder (style from analysis, scene from slide plan, explicit "no product, no logo, no text" constraints, safe area for product/text)
-- [ ] Image generation call (size/quality from env), save raw background + prompt to `image_prompts.json`
-- [ ] `compose.ts` (sharp): layout templates (product-hero, text-heavy carousel slide, cover), product cut-out with soft shadow + scale, logo placement, SVG text with brand font, auto text colour/contrast, 1080×1350 output
-- [ ] Caption finalisation (HR) with only verified facts; hashtags
-- [ ] Experiment (~30 min, part of estimate): compose vs OpenAI image edit with product reference for one slide → record in REFINEMENTS.md
-- [ ] Unit tests: compose produces correct dimensions; text fits box (no overflow)
+- [x] Background prompt builder (style from analysis, scene from slide plan, explicit "no product, no logo, no text" constraints, safe area for product/text)
+- [x] Image generation call (size/quality from env), save raw background + prompt to `image_prompts.json`; unchanged backgrounds reused on re-run
+- [x] `compose.ts` (sharp): layouts (text-only, product-center/left/right), product cut-out with soft shadow + scale, logo placement, Pango text auto-fit, scrim for contrast, price badge, 1080×1350 feed + 1080×1920 story — brand font not yet (system `sans bold`, ADR-021)
+- [ ] Caption finalisation (HR) with only verified facts; hashtags — captions + hashtags + CTA assembled into `caption.txt`; fact check of caption text moves to M4
+- [ ] Experiment (~30 min, part of estimate): compose vs OpenAI image edit with product reference for one slide → record in REFINEMENTS.md — pending the API key and real product photos
+- [x] Unit tests: compose produces correct dimensions; text fits box (no overflow); cut-out keeps white areas inside the product
 
 **Done when:** a full run produces 3 posts (≥1 carousel) as PNGs + `captions.json`; author's visual review finds no distorted logo/packaging; experiment entry written.
 
