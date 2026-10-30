@@ -1,40 +1,9 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { findRepoRoot } from '../config.js';
-import { instagramFixture, planFixture, siteFixture, siteFixtureSources } from '../fixtures/index.js';
-import type { ContentPlanModel } from '../schemas/plan.js';
-import { checkBrandKit, parseBriefYaml } from './01-brief.js';
-import { mergeAnalysis } from './02-analysis.js';
-import { validatePlan } from './03-plan.js';
 import { buildInstagramText, createStage, type CaptionRecord, type ImagePromptRecord } from './04-create.js';
-import { fakeAi, makeContext, tempDir } from './test-helpers.js';
+import { fakeAi, prepareRunThroughPlan } from './test-helpers.js';
 
-const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), 'brief.example.yaml'), 'utf8'));
-
-/** A run whose stages 01–03 are done, with a brand kit containing one product photo and a logo. */
-async function preparedContext() {
-  const brandKitDir = tempDir('kit');
-  const kit = path.join(brandKitDir, brief.brand.slug);
-  mkdirSync(path.join(kit, 'products'), { recursive: true });
-  const white = (w: number, h: number) => sharp({ create: { width: w, height: h, channels: 3, background: '#ffffff' } });
-  writeFileSync(path.join(kit, 'logo.png'), await white(300, 100).png().toBuffer());
-  const firstWithImage = brief.products.find((p) => p.imageFile)!;
-  writeFileSync(
-    path.join(kit, 'products', firstWithImage.imageFile!),
-    await white(400, 500).composite([{ input: await sharp({ create: { width: 200, height: 300, channels: 3, background: '#111' } }).png().toBuffer(), left: 100, top: 100 }]).png().toBuffer(),
-  );
-
-  const ai = fakeAi({});
-  const ctx = makeContext({ ai, brandKitDir });
-  ctx.store.writeJson('brief', 'brief.json', { ...brief, brandKit: checkBrandKit(brandKitDir, brief), warnings: [] });
-  const analysis = mergeAnalysis({ brief, site: siteFixture, siteSources: siteFixtureSources, instagram: instagramFixture, screenshots: ['01.png', '02.png'], now: '2026-10-30T12:00:00.000Z' });
-  ctx.store.writeJson('analysis', 'analysis.json', analysis);
-  const { plan } = validatePlan(structuredClone(planFixture) as ContentPlanModel, analysis);
-  ctx.store.writeJson('plan', 'plan.json', plan);
-  return { ctx, plan };
-}
+const preparedContext = () => prepareRunThroughPlan(fakeAi({}));
 
 describe('createStage', () => {
   it('composes every slide of the 3 posts at the right canvas size and writes captions and prompts', async () => {

@@ -1,10 +1,15 @@
 // Test-only helpers (imported by *.test.ts; not exported from the package).
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import type { AiCallRecord, AiClient, StructuredRequest } from '../ai/types.js';
-import { parseConfig } from '../config.js';
+import { findRepoRoot, parseConfig } from '../config.js';
+import { instagramFixture, planFixture, siteFixture, siteFixtureSources } from '../fixtures/index.js';
+import type { ContentPlanModel } from '../schemas/plan.js';
+import { checkBrandKit, parseBriefYaml } from './01-brief.js';
+import { mergeAnalysis } from './02-analysis.js';
+import { validatePlan } from './03-plan.js';
 import type { PendingQuestion, StageContext } from '../pipeline/types.js';
 import { RunStore } from '../run/store.js';
 
@@ -58,4 +63,28 @@ export function makeContext(opts: {
     logs,
     questions,
   };
+}
+
+/**
+ * A run whose stages 01–03 are done (artifacts written from the fixtures), with a
+ * temp brand kit holding a logo and a photo for the first product that has an image file.
+ */
+export async function prepareRunThroughPlan(ai: AiClient) {
+  const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), 'brief.example.yaml'), 'utf8'));
+  const brandKitDir = tempDir('kit');
+  const kit = path.join(brandKitDir, brief.brand.slug);
+  mkdirSync(path.join(kit, 'products'), { recursive: true });
+  const white = (w: number, h: number) => sharp({ create: { width: w, height: h, channels: 3, background: '#ffffff' } });
+  writeFileSync(path.join(kit, 'logo.png'), await white(300, 100).png().toBuffer());
+  const withImage = brief.products.find((p) => p.imageFile)!;
+  const tub = await sharp({ create: { width: 200, height: 300, channels: 3, background: '#111' } }).png().toBuffer();
+  writeFileSync(path.join(kit, 'products', withImage.imageFile!), await white(400, 500).composite([{ input: tub, left: 100, top: 100 }]).png().toBuffer());
+
+  const ctx = makeContext({ ai, brandKitDir });
+  ctx.store.writeJson('brief', 'brief.json', { ...brief, brandKit: checkBrandKit(brandKitDir, brief), warnings: [] });
+  const analysis = mergeAnalysis({ brief, site: siteFixture, siteSources: siteFixtureSources, instagram: instagramFixture, screenshots: ['01.png', '02.png'], now: '2026-10-30T12:00:00.000Z' });
+  ctx.store.writeJson('analysis', 'analysis.json', analysis);
+  const { plan } = validatePlan(structuredClone(planFixture) as ContentPlanModel, analysis);
+  ctx.store.writeJson('plan', 'plan.json', plan);
+  return { ctx, plan, analysis, brief };
 }

@@ -41,9 +41,9 @@ export interface CaptionRecord {
   instagramText: string;
 }
 
-const postDir = (n: number) => `post_${n}`;
+export const postDir = (n: number) => `post_${n}`;
 
-function hashOf(...parts: string[]): string {
+export function hashOf(...parts: string[]): string {
   return createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 16);
 }
 
@@ -79,9 +79,54 @@ function readOptional(file: string | null): Buffer | null {
   return file && existsSync(file) ? readFileSync(file) : null;
 }
 
-interface SlideJob {
+export interface SlideJob {
   post: PostPlan;
   slide: SlidePlan;
+}
+
+/** Real brand assets for compositing: logo and product photos by product name. */
+export interface BrandAssets {
+  logo: Buffer | null;
+  products: Map<string, Buffer | null>;
+}
+
+export function loadBrandAssets(brandKitDir: string, brief: BriefArtifact): BrandAssets {
+  const kitDir = path.join(brandKitDir, brief.brand.slug);
+  return {
+    logo: readOptional(path.join(kitDir, 'logo.png')),
+    products: new Map(brief.products.map((p) => [p.name, readOptional(p.imageFile ? path.join(kitDir, 'products', p.imageFile) : null)])),
+  };
+}
+
+export type ComposeSpec = Omit<ComposeResult, 'png'> & { post: number; slide: number; file: string; productImage: boolean; priceLabel: string | null };
+
+/** Composes one slide from a background; shared by stage 04 and the regeneration in stage 05. */
+export async function composeJob(
+  job: SlideJob,
+  background: Buffer,
+  analysis: BrandAnalysis,
+  assets: BrandAssets,
+): Promise<{ png: Buffer; spec: Omit<ComposeSpec, 'file'> }> {
+  const { post, slide } = job;
+  const product = slide.productName ? (assets.products.get(slide.productName) ?? null) : null;
+  const label = priceLabel(slide, analysis);
+  const result = await composeSlide({
+    canvas: canvasFor(post.format),
+    layout: slide.layout,
+    background,
+    headline: slide.headlineHr,
+    subtext: slide.subtextHr,
+    priceLabel: label,
+    product,
+    productPlaceholder: slide.productName,
+    logo: assets.logo,
+    colorsHex: slide.brandColorsHex.length ? slide.brandColorsHex : analysis.visualStyle.colorsHex,
+    font: DEFAULT_FONT,
+  });
+  return {
+    png: result.png,
+    spec: { post: post.number, slide: slide.index, productImage: Boolean(product), priceLabel: label, layout: result.layout, placed: result.placed },
+  };
 }
 
 /** Reuses an existing background when prompt, model and settings are unchanged (cheap re-runs of compose). */
@@ -118,12 +163,8 @@ export const createStage: StageDefinition = {
     const analysis = ctx.store.readJson('analysis', 'analysis.json', BrandAnalysisSchema);
     const plan = ctx.store.readJson('plan', 'plan.json', ContentPlanSchema);
 
-    const kitDir = path.join(ctx.brandKitDir, brief.brand.slug);
-    const logo = readOptional(path.join(kitDir, 'logo.png'));
-    if (!logo) ctx.log(`warning: no logo in ${brief.brand.slug}/logo.png — slides are composed without a logo`);
-    const productImages = new Map(
-      brief.products.map((p) => [p.name, readOptional(p.imageFile ? path.join(kitDir, 'products', p.imageFile) : null)]),
-    );
+    const assets = loadBrandAssets(ctx.brandKitDir, brief);
+    if (!assets.logo) ctx.log(`warning: no logo in ${brief.brand.slug}/logo.png — slides are composed without a logo`);
 
     const jobs: SlideJob[] = plan.posts.flatMap((post) => post.slides.map((slide) => ({ post, slide })));
     const prev = previousPrompts(ctx);
@@ -134,29 +175,14 @@ export const createStage: StageDefinition = {
     if (reused) ctx.log(`create: reused ${reused} unchanged background(s)`);
     ctx.store.writeJson('create', 'image_prompts.json', backgrounds.map(({ png: _png, ...r }) => r));
 
-    const specs: (Omit<ComposeResult, 'png'> & { post: number; slide: number; file: string; productImage: boolean; priceLabel: string | null })[] = [];
+    const specs: ComposeSpec[] = [];
     const missingProducts = new Set<string>();
     for (const [i, job] of jobs.entries()) {
-      const { post, slide } = job;
-      const product = slide.productName ? (productImages.get(slide.productName) ?? null) : null;
-      if (slide.productName && !product) missingProducts.add(slide.productName);
-      const label = priceLabel(slide, analysis);
-      const result = await composeSlide({
-        canvas: canvasFor(post.format),
-        layout: slide.layout,
-        background: backgrounds[i]!.png,
-        headline: slide.headlineHr,
-        subtext: slide.subtextHr,
-        priceLabel: label,
-        product,
-        productPlaceholder: slide.productName,
-        logo,
-        colorsHex: slide.brandColorsHex.length ? slide.brandColorsHex : analysis.visualStyle.colorsHex,
-        font: DEFAULT_FONT,
-      });
-      const file = `${postDir(post.number)}/slide_${slide.index}.png`;
-      ctx.store.writeBuffer('create', file, result.png);
-      specs.push({ post: post.number, slide: slide.index, file, productImage: Boolean(product), priceLabel: label, layout: result.layout, placed: result.placed });
+      const { png, spec } = await composeJob(job, backgrounds[i]!.png, analysis, assets);
+      if (job.slide.productName && !spec.productImage) missingProducts.add(job.slide.productName);
+      const file = `${postDir(job.post.number)}/slide_${job.slide.index}.png`;
+      ctx.store.writeBuffer('create', file, png);
+      specs.push({ ...spec, file });
     }
     for (const name of missingProducts) ctx.log(`warning: no product photo for "${name}" — a labelled placeholder was used`);
     ctx.store.writeJson('create', 'compose_specs.json', specs);
