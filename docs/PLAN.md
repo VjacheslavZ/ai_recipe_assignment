@@ -144,7 +144,7 @@ Estimates are the **author's active time**; waiting time (Claude Code writing co
 
 **Done when:** `pnpm install && pnpm -r build && pnpm test` pass on an empty skeleton; docs exist.
 
-### M1 — Core: OpenAI wrapper, schemas, stages 01–03, CLI · est. 45 min
+### M1 — Core: OpenAI wrapper, schemas, stages 01–03, CLI · est. 45 min · **DONE in mock mode (2026-10-30)**; real OpenAI run pending the API key
 
 - [ ] `config.ts`: env loading + validation (Zod), price table per model, `AI_PROVIDER=openai|mock`
 - [ ] `ai/mock.ts`: mock provider returning schema-valid fixtures + placeholder images (ADR-019) — all development until the key arrives runs on it
