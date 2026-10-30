@@ -19,6 +19,7 @@
     "drizzle-kit": "^0.31.11"
   },
   "dependencies": {
+    "@fastify/multipart": "^10.1.6",
     "@recipe/core": "workspace:*",
     "better-sqlite3": "^12.11.1",
     "drizzle-orm": "^0.45.4",
