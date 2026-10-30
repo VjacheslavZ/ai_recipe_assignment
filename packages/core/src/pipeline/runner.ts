@@ -1,7 +1,7 @@
 import type { AiClient } from '../ai/types.js';
 import type { Config } from '../config.js';
 import type { CostReport, RunStore } from '../run/store.js';
-import type { PendingQuestion, Stage, StageContext, StageDefinition } from './types.js';
+import type { PendingQuestion, Stage, StageContext, StageDefinition, StageStatus } from './types.js';
 
 export interface RunPipelineOptions {
   stages: StageDefinition[];
@@ -14,6 +14,10 @@ export interface RunPipelineOptions {
   toStep?: number;
   ask?: (q: PendingQuestion) => Promise<string | null>;
   log?: (msg: string) => void;
+  /** Brand kit root; default `config.BRAND_KIT_DIR` (the server passes a per-run copy with uploads). */
+  brandKitDir?: string;
+  /** Called after every stage status change (the server turns these into SSE events). */
+  onStage?: (stage: Stage, status: StageStatus, error?: string) => void;
 }
 
 export interface RunPipelineResult {
@@ -33,6 +37,10 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   const { store, config, ai } = opts;
   const log = opts.log ?? (() => {});
   const ask = opts.ask ?? (async () => null);
+  const mark = (stage: Stage, status: StageStatus, error?: string) => {
+    store.markStage(stage, status, error ? { error } : {});
+    opts.onStage?.(stage, status, error);
+  };
   const stages = [...opts.stages].sort((a, b) => a.no - b.no);
   const first = stages[0];
   const last = stages.at(-1);
@@ -65,7 +73,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   }
 
   for (const s of stages) {
-    if (s.no > toStep && statusOf(s) !== 'pending') store.markStage(s.id, 'pending');
+    if (s.no > toStep && statusOf(s) !== 'pending') mark(s.id, 'pending');
   }
 
   const ctx: StageContext = {
@@ -74,7 +82,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     config,
     ai,
     store,
-    brandKitDir: config.BRAND_KIT_DIR,
+    brandKitDir: opts.brandKitDir ?? config.BRAND_KIT_DIR,
     log,
     ask,
   };
@@ -83,16 +91,16 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
   try {
     for (const s of stages.filter((x) => x.no >= fromStep && x.no <= toStep)) {
       log(`[${s.no}/${last.no}] ${s.title}…`);
-      store.markStage(s.id, 'running');
+      mark(s.id, 'running');
       const t0 = Date.now();
       try {
         await s.run(ctx);
       } catch (err) {
-        store.markStage(s.id, 'failed', { error: errorMessage(err) });
+        mark(s.id, 'failed', errorMessage(err));
         log(`[${s.no}/${last.no}] ${s.title} failed: ${errorMessage(err)}`);
         throw err;
       }
-      store.markStage(s.id, 'done');
+      mark(s.id, 'done');
       ran.push(s.id);
       log(`[${s.no}/${last.no}] ${s.title} done in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
     }
