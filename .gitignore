@@ -1,0 +1,32 @@
+# Dependencies & build output
+node_modules/
+dist/
+*.tsbuildinfo
+coverage/
+
+# Secrets — only .env.example is committed
+.env
+.env.*
+!.env.example
+
+# SQLite database (lives in data/, folder is kept)
+data/*
+!data/.gitkeep
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Pipeline runs: the final demo run in runs/<runId>/ IS committed later as
+# part of the submission, so we only ignore scratch/experimental runs.
+runs/_tmp/
+runs/_scratch/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+AI_Recipe_Assignment.md
+AI_Recipe_Assignment_EN.pdf
