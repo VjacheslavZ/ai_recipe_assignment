@@ -179,3 +179,11 @@ Date: 2026-10-30 · Status: Accepted
 - **Alternatives:** SVG `<text>` with manual wrapping (no reliable measurement); generating text with the image model (garbled diacritics); always regenerating backgrounds.
 - **Consequences:** Font is the system `sans bold` unless a licensed brand font is added (fontconfig name), so typography differs from the brand's — noted as a limitation. Reproducible slide geometry is stored in `compose_specs.json`.
 
+## ADR-022 — QA: vision rubric per slide, caption fact check, one targeted regeneration
+Date: 2026-10-30 · Status: Accepted
+
+- **Context:** The assignment requires checked results and no invented facts; the vacancy asks for automated quality checking of generated images.
+- **Decision:** Stage 05 sends each finished slide (plus the reference product photo when there is one) to the vision model with a five-criterion rubric (brand fit, readability, product accuracy, goal fit, text correctness), scores 1–5 each, mapped to 0–10 and compared with `QA_SCORE_THRESHOLD`. A failing slide gets at most `MAX_REGENERATIONS` new backgrounds: the original prompt plus the QA's `backgroundFix`, recomposed with the same real assets and re-scored; the best attempt ships, all attempts stay in `review.json`. Captions are fact-checked by the text model against the verified facts and usable prices, plus a code check of every price in the text. Captions are never rewritten automatically (that could introduce new claims): failures go to "Needs human attention", together with missing product photos, a missing logo and mock runs. Output: `05_review/posts/` (chosen versions), `POSTS.md`, `review.md`, `review.json`, `posts.zip`.
+- **Alternatives:** Regenerate the whole post; let the model rewrite captions; a second model as judge only.
+- **Consequences:** Regeneration only touches the background, so it cannot fix copy or layout problems (those need a plan/compose change → REFINEMENTS). QA cost is one vision call per slide per attempt plus one text call per caption.
+

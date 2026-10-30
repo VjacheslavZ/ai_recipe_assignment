@@ -179,14 +179,16 @@ Estimates are the **author's active time**; waiting time (Claude Code writing co
 
 **Done when:** a full run produces 3 posts (≥1 carousel) as PNGs + `captions.json`; author's visual review finds no distorted logo/packaging; experiment entry written.
 
-### M4 — Stage 05: QA + regeneration · est. 30 min
+### M4 — Stage 05: QA + regeneration · est. 30 min · **code DONE in mock mode (2026-10-30)**; real vision QA pending the API key
 
-- [ ] QA rubric prompt + `Review` schema: per-criterion score 1–5 + reason (brand fit, readability, product accuracy, goal fit, no invented facts)
-- [ ] Caption fact check: each claim in caption must map to a `verified` fact ID or be flagged
-- [ ] Threshold from env; failing slide → one regeneration with QA feedback appended to prompt → re-score; keep best
-- [ ] `review.md`, `posts.zip`, `cost_report.json`
+- [x] QA rubric prompt + `Review` schema: per-criterion score 1–5 + reason (brand fit, readability, product accuracy vs reference photo, goal fit, text correctness); "no invented facts" is checked on the caption
+- [x] Caption fact check: each claim in caption must map to a `verified` fact ID or be flagged; plus a code check that every price in the caption is verified/user-confirmed
+- [x] Threshold from env; failing slide → one regeneration with QA feedback appended to prompt → re-score; keep best
+- [x] `review.md`, `posts.zip` (chosen slides + captions + POSTS.md + review.md), `cost_report.json`
 
 **Done when:** `review.json` has scores for every slide; a deliberately bad slide (e.g. low-contrast text) is caught and regenerated in a test run; cost report totals match `ai_calls`.
+
+_Status 2026-10-30:_ scores for every slide ✅; regeneration of a failing slide ✅ in a unit test with a simulated low QA verdict (a real low-contrast slide judged by the vision model still to be checked with the key); cost report = `ai_calls` ✅ (21 calls, tokens equal) on a mock run.
 
 ### M5 — Server: SQLite, queue, API, SSE · est. 20 min
 
