@@ -10,8 +10,8 @@ OpenAI image model *without* the product; the real product photo, logo and
 headline are composited on top with `sharp`. Every OpenAI call is logged with
 model, tokens, cost and duration.
 
-See [docs/PLAN.md](docs/PLAN.md) for the plan and [docs/DECISIONS.md](docs/DECISIONS.md)
-for design decisions.
+See [docs/PLAN.md](docs/PLAN.md) for the plan, [docs/DECISIONS.md](docs/DECISIONS.md)
+for design decisions and [RECIPE.md](RECIPE.md) for running the recipe from Claude Code.
 
 ## Requirements
 
@@ -34,7 +34,8 @@ their install scripts via `allowBuilds` in `pnpm-workspace.yaml`.
 | Command | What it does |
 | --- | --- |
 | `pnpm recipe --help` | CLI help |
-| `pnpm recipe run --brief brief.yaml [--from-step 3]` | Run the pipeline (TODO) |
+| `pnpm recipe run --brief brief.example.yaml` | Run the whole pipeline from the CLI |
+| `pnpm recipe run --run-id <id> --from-step 4 [--to-step 4]` | Resume or re-run part of an existing run |
 | `pnpm dev:server` | API server (Fastify) on `PORT` (default 3001) with watch |
 | `pnpm dev:web` | Web UI (Vite) on http://localhost:5173, proxies `/api` to the server |
 | `pnpm typecheck` | Type-check all packages |
@@ -53,21 +54,100 @@ brand_kit/
   gymbeamhr/  logo, product photos, Instagram screenshots, fonts (see its README)
 runs/       run artifacts, one folder per run (the final demo run is committed)
 data/       SQLite database (git-ignored)
-docs/       plan and decision log
+docs/       plan, decision log, refinements
 ```
 
 ## How to run the recipe
 
-TODO
+There are three entry points. All of them run the same stage code in `packages/core` and write the same files to `runs/<runId>/`.
+
+### 1. CLI
+
+```bash
+pnpm recipe run --brief brief.example.yaml
+```
+
+The CLI prints each stage and each AI call with model, duration and cost. When a product price cannot be verified on the brand site, it asks you for the price (press Enter to leave it out). With `--yes`, or when stdin is not a terminal (CI, agents), it never asks: each unverified price is printed as an unanswered question with its id and left out. Give answers up front with `--answer <questionId>=<value>` (repeatable), for example `--answer price:gymbeam-true-whey-protein=29.90`.
+
+Resume or redo part of a run:
+
+```bash
+pnpm recipe run --run-id gymbeamhr_20261030-183119             # continue from the first unfinished stage
+pnpm recipe run --run-id gymbeamhr_20261030-183119 --from-step 4  # redo create + review, keep brief/analysis/plan
+pnpm recipe run --run-id gymbeamhr_20261030-183119 --from-step 2 --to-step 2  # redo the analysis only
+```
+
+Steps: 1 brief, 2 analysis, 3 plan, 4 create, 5 review. Stages before `--from-step` keep their output; a stage can only start when every earlier stage is done.
+
+### 2. Web UI
+
+```bash
+pnpm dev:server   # terminal 1, API on http://127.0.0.1:3001
+pnpm dev:web      # terminal 2, open http://localhost:5173
+```
+
+On **Start a run**, load the GymBeam example or paste your own brief, optionally upload a logo, product photos and Instagram screenshots for this run only, and start. The run page shows the five stages live, asks price questions in a red card (10 minutes, then the price is left out), and lets you re-run from any stage. The **Posts** tab shows the three posts in phone frames with QA scores per slide, the caption in Croatian and English, and the fact-check result; **Download posts.zip** appears after the review. Runs are listed from SQLite (`data/recipe.db`); their files are in `runs/`.
+
+### 3. Claude Code
+
+Open the repository in Claude Code and follow [RECIPE.md](RECIPE.md): Claude runs the phases one at a time, checks each artifact against a checklist and stops at the human checkpoints.
+
+### Trying it without an API key
+
+Set `AI_PROVIDER=mock` in `.env`. Every stage then runs offline on fixtures (placeholder backgrounds, canned analysis and plan), at no cost. Use the synthetic brand kit from the tests or your own images. Mock output is marked as not publishable in `review.md`.
+
+### What a run produces
+
+```
+runs/<brand>_<yyyymmdd-hhmmss>/
+  brief.input.yaml, config.json      the brief as given, models and settings (no keys)
+  state.json                         stage status, timestamps, errors
+  ai_calls.jsonl, cost_report.json   every AI call with tokens, cost and duration
+  01_brief/     brief.json, brief.md
+  02_analysis/  analysis.json, analysis.md, sources.json
+  03_plan/      plan.json, plan.md
+  04_create/    post_N/slide_K.png, captions.json, image_prompts.json, compose_specs.json, POSTS.md
+  05_review/    posts/ (final slides + caption.txt), review.json, review.md, POSTS.md, posts.zip
+```
 
 ## Human actions required
 
-TODO
+| When | Action | Why it cannot be automated |
+| --- | --- | --- |
+| Setup | Put an OpenAI API key in `.env` (`OPENAI_API_KEY`), set `AI_PROVIDER=openai` | Secret; never committed |
+| Before the run | Logo and real product photos in `brand_kit/<slug>/` (or upload them in the UI) | Posts show only real products; the pipeline never generates packaging |
+| Before the run | 6–10 screenshots of recent Instagram posts in `brand_kit/<slug>/instagram/` | Instagram blocks automated access; screenshots feed the style analysis |
+| Before the run | Check product names and page URLs in the brief (fields marked `VERIFY` / `TODO`) | They are the ground truth for facts and prices |
+| During the run | Answer price questions, or skip them | A price is printed only if it is verified on the brand site or confirmed by you |
+| After the run | Read the "Check before publishing" list in `review.md` / the Posts tab | Lists slides below the QA threshold, unsupported claims, caption issues |
+| After the run | Have a native speaker read the Croatian captions; approve or re-run posts | Final responsibility for published copy stays with a person |
 
 ## What may vary between runs
 
-TODO
+Fixed by the inputs: the products and their photos, the logo, which facts and prices may be used (only verified ones, with their URLs), post formats and the slide layouts, canvas sizes, the QA rubric and threshold.
+
+Varies between runs: the wording of headlines and captions, the post concepts, the generated backgrounds (image models are not seeded), the colours and style the analysis reads from the screenshots, which facts the plan picks, and QA scores. Whatever the brand site shows on the day of the run also changes the result, since prices and product facts are researched live; each fact records its URL and date.
+
+To get the same posts again, keep the run folder: re-running from step 4 reuses the plan, and backgrounds are cached by prompt within a run, so only slides whose prompt changed are regenerated.
 
 ## Cost & time
 
-TODO
+Every AI call is logged in `runs/<id>/ai_calls.jsonl` and summed per stage and model in `cost_report.json` (also on the Costs tab and at the end of the CLI output). Prices per model are in `packages/core/src/ai/pricing.ts`; calls to a model without a price entry are counted and flagged, so the total is never silently low.
+
+A run makes about 21 AI calls: 2 for the analysis (site research with web search, Instagram screenshots), 1 for the plan, 1 image per slide (8 for three posts), and 1 QA call per slide plus 1 fact check per caption. Each slide below the QA threshold adds one image and one QA call.
+
+- **Development defaults** (`gpt-6-luna`, `gpt-image-1-mini`, low quality, 1024×1024): a few cents per run.
+- **Final run** (`gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-image-2.5-flare`, high quality, 1024×1536): measured cost and time of the submitted run are in its `cost_report.json`.
+
+Mock runs finish in seconds. With OpenAI most of the time goes to image generation and web search.
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| `OPENAI_API_KEY is required` | Set the key in `.env`, or use `AI_PROVIDER=mock` |
+| The UI says "API not reachable" | Start `pnpm dev:server`; check that `PORT` matches the Vite proxy (3001) |
+| `sharp` or `better-sqlite3` fails to load | Run `pnpm install` again on Node 22; their build scripts are allowed in `pnpm-workspace.yaml`. `better-sqlite3` is pinned to 12 because 13 crashes on Node 22.12 |
+| The analysis finds no product facts | Check the product URLs in the brief. If the text model rejects the `web_search` tool, set `OPENAI_TEXT_MODEL` to a model that supports it (for example `gpt-5.4-nano`) |
+| A stage failed | Fix the cause (brief, brand kit, key), then `pnpm recipe run --run-id <id>`, or click **Re-run from here** in the UI |
+| Text on slides uses a generic font | Slides use the system sans-serif bold through Pango; brand fonts in `brand_kit/<slug>/fonts/` are not wired in yet |

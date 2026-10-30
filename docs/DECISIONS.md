@@ -119,9 +119,9 @@ Date: 2026-10-30 · Status: Accepted
 Date: 2026-10-30 · Status: Accepted
 
 - **Context:** Vacancy values AI-assisted development with the ability to review AI code; the assignment accepts prompt-only recipes for agentic environments.
-- **Decision:** Code is written with Claude Code and reviewed/edited by the author (stated openly in the PDF; TIMELOG separates author active time from Claude Code working time). `RECIPE.md` lets the same phases run inside Claude Code, reading/writing the same artifact layout.
+- **Decision:** Code is written with Claude Code and reviewed/edited by the author (stated openly in the PDF; TIMELOG separates author active time from Claude Code working time). `RECIPE.md` lets the same phases run inside Claude Code: the agent runs each phase through the CLI, checks its artifact against a checklist and stops at human checkpoints (price answers, post approval). It does not re-implement phases in prompts, so there is one implementation to keep correct. Because an agent's shell is not interactive, the CLI prints unanswered price questions with their ids and accepts answers with `--answer <id>=<value>` (updated 2026-10-30, M7).
 - **Alternatives:** Hand-written code only; app-only recipe.
-- **Consequences:** Faster delivery; review corrections are documented in REFINEMENTS.md. Two entry points must be kept consistent.
+- **Consequences:** Faster delivery; review corrections are documented in REFINEMENTS.md. RECIPE.md needs Node and the repo like the CLI; a prompt-only recipe without code was rejected because compositing real product photos needs `sharp`.
 
 ## ADR-015 — Brand: GymBeam Croatia (@gymbeamhr)
 Date: 2026-10-30 · Status: Accepted (confirmed by the author)
@@ -163,7 +163,7 @@ Date: 2026-10-30 · Status: Accepted
 - **Alternatives:** Develop stages only after the key arrives; record/replay real responses.
 - **Consequences:** Unit and integration tests run offline and free; the cost tracker logs `cost_usd = 0` for mock calls.
 
-## мADR-020 — Cheapest image settings by default, high quality only for the final run
+## ADR-020 — Cheapest image settings by default, high quality only for the final run
 Date: 2026-10-30 · Status: Accepted
 
 - **Context:** Image generation is the main cost driver; most runs during development are for testing the pipeline, not for final quality.

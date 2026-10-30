@@ -61,7 +61,7 @@ Related docs: [DECISIONS.md](./DECISIONS.md) (ADRs) · [TIMELOG.md](./TIMELOG.md
 
 - **core** has no knowledge of HTTP or DB; it receives a `RunContext` (run dir, config, `onAiCall` / `onProgress` callbacks). CLI and server both drive the same stage functions → identical behaviour from either entry point.
 - **CLI** persists status to `runs/<id>/state.json` when run standalone; **server** persists to SQLite and mirrors the same artifact files.
-- **RECIPE.md** is a third entry point: step-by-step prompts for running the same phases inside Claude Code (no Node app needed), reading/writing the same artifact files.
+- **RECIPE.md** is a third entry point: step-by-step prompts for running the same phases inside Claude Code. The agent runs each phase through the CLI (`--from-step N --to-step N`), checks the artifact against a checklist and stops at human checkpoints, so all three entry points share one implementation (ADR-014).
 
 ### Data flow (one run)
 
@@ -212,9 +212,9 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 
 ### M7 — Tests, README, RECIPE.md · est. 20 min
 
-- [ ] Vitest: schema validation, cost calculation, compose dimensions/overflow, resumability (`--from-step` keeps earlier artifacts), job queue lock/requeue; AI calls mocked
-- [ ] README: prerequisites, setup, `.env`, start commands (CLI, server+web), human actions, troubleshooting
-- [ ] RECIPE.md: Claude Code entry point — phases with prompts, inputs/outputs, same artifact layout
+- [x] Vitest: schema validation, cost calculation, compose dimensions/overflow, resumability (`--from-step` keeps earlier artifacts), job queue lock/requeue; AI calls mocked (84 tests)
+- [x] README: prerequisites, setup, `.env`, start commands (CLI, server+web), human actions, what varies, cost & time, troubleshooting
+- [x] RECIPE.md: Claude Code entry point — phases with prompts, inputs/outputs, same artifact layout; CLI `--answer` for price questions in non-interactive shells
 
 **Done when:** `pnpm test` green; a fresh clone + README steps reach a finished run.
 
