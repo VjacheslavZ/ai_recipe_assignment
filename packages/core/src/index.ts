@@ -35,6 +35,10 @@ export {
   renderBriefMd,
   renderPlanMd,
   renderPostsMd,
+  renderReviewMd,
+  checkCaptionPrices,
+  revisionPrompt,
+  slideScore,
   DEFAULT_FONT,
   buildInstagramText,
 } from './stages/index.js';

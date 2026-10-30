@@ -2,6 +2,7 @@ import { isPriceUsable } from '../prompts/plan.js';
 import type { BrandAnalysis, Fact, ProductFact } from '../schemas/analysis.js';
 import type { BriefArtifact } from '../schemas/brief.js';
 import type { ContentPlan } from '../schemas/plan.js';
+import type { Review } from '../schemas/review.js';
 
 const link = (s: string | null) => (!s ? '—' : /^https?:\/\//.test(s) ? `[${s}](${s})` : `\`${s}\``);
 const list = (items: string[]) => (items.length ? items.map((i) => `- ${i}`).join('\n') : '- —');
@@ -174,6 +175,46 @@ ${p.captionEn}
   return `# Finished posts
 
 ${plan.summary}
+
+${posts.join('\n')}`;
+}
+
+/** `05_review/review.md`: QA scores per slide (all attempts), caption fact check and open items. */
+export function renderReviewMd(review: Review, plan: ContentPlan): string {
+  const posts = plan.posts.map((p) => {
+    const slides = review.slides
+      .filter((s) => s.post === p.number)
+      .map((s) => {
+        const attempts = s.attempts
+          .map((a, i) => {
+            const scores = Object.entries(a.scores).map(([k, v]) => `${k} ${v.score}/5`).join(' · ');
+            const issues = a.issues.length ? `\n    - Issues: ${a.issues.join('; ')}` : '';
+            return `  - ${i === s.chosen ? '**chosen** ' : ''}attempt ${a.attempt}: **${a.score}/10** (${scores}) — \`${a.file}\`${issues}`;
+          })
+          .join('\n');
+        return `- Slide ${s.slide}: ${s.passed ? '✅ passed' : '⚠️ below threshold'}\n${attempts}`;
+      })
+      .join('\n');
+    const c = review.captions.find((x) => x.post === p.number);
+    const claims = c?.claims.length
+      ? c.claims.map((cl) => `  - ${cl.supported ? '✅' : '❌'} "${cl.text}"${cl.factId ? ` — ${cl.factId}` : ''}`).join('\n')
+      : '  - (no factual claims)';
+    const problems = [...(c?.languageIssues ?? []).map((x) => `language: ${x}`), ...(c?.codeIssues ?? [])];
+    return `## Post ${p.number} — ${p.format} · ${p.goal}
+
+### Slides
+${slides}
+
+### Caption fact check: ${c?.passed ? '✅ ok' : '⚠️ needs fix'}
+${claims}${problems.length ? `\n${list(problems)}` : ''}
+`;
+  });
+  return `# QA review
+
+Threshold ${review.threshold}/10 · max ${review.maxRegenerations} regeneration(s) per slide · overall: ${review.passed ? '✅ passed' : '⚠️ not passed'}
+
+## Needs human attention
+${review.needsHumanAttention.length ? list(review.needsHumanAttention) : '- nothing'}
 
 ${posts.join('\n')}`;
 }
