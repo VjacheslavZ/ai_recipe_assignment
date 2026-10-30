@@ -1,1 +1,70 @@
 @import "tailwindcss";
+
+/* Proofing desk: neutral grey surface so any brand palette reads true,
+   paper panels on top, grease-pencil red only for what needs a human. */
+@theme {
+  --color-desk: #d6d8d3;
+  --color-desk-deep: #c3c6c0;
+  --color-paper: #f8f8f5;
+  --color-ink: #1f2a26;
+  --color-ink-soft: #4d5a55;
+  --color-ink-faint: #7d8883;
+  --color-rule: #b9bdb6;
+  --color-pass: #2c7a57;
+  --color-pencil: #c8372a;
+  --color-amber: #b86e12;
+  --color-active: #2453a6;
+
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    background: var(--color-desk);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-active);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@utility font-wide {
+  font-stretch: 118%;
+}
+
+@utility font-narrow {
+  font-stretch: 75%;
+}
+
+/* Rendered markdown from analysis.md / plan.md / review.md */
+.prose-run {
+  max-width: 72ch;
+  line-height: 1.55;
+  color: var(--color-ink);
+}
+.prose-run h1 { font-size: 1.6rem; font-weight: 700; font-stretch: 118%; margin: 0 0 1rem; }
+.prose-run h2 { font-size: 1.15rem; font-weight: 700; margin: 2rem 0 0.6rem; }
+.prose-run h3 { font-size: 1rem; font-weight: 650; margin: 1.4rem 0 0.4rem; }
+.prose-run p, .prose-run ul, .prose-run ol { margin: 0 0 0.8rem; }
+.prose-run ul { list-style: disc; padding-left: 1.2rem; }
+.prose-run ol { list-style: decimal; padding-left: 1.4rem; }
+.prose-run li { margin: 0.2rem 0; }
+.prose-run a { color: var(--color-active); text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+.prose-run code { font-size: 0.85em; background: var(--color-desk); padding: 0.05rem 0.3rem; border-radius: 3px; }
+.prose-run pre { background: var(--color-desk); padding: 0.8rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+.prose-run img { display: inline-block; width: 30%; margin: 0.3rem 0.3rem 0 0; border-radius: 6px; }
+.prose-run table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 0 0 1rem; }
+.prose-run th, .prose-run td { border-bottom: 1px solid var(--color-rule); padding: 0.3rem 0.6rem; text-align: left; }
