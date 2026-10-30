@@ -1,0 +1,82 @@
+# Demo brief for the AI recipe — GymBeam Croatia.
+#
+# This is a HUMAN INPUT file: it holds the answers a user gives in the brief
+# step. Run it with:  pnpm recipe run --brief brief.example.yaml
+#
+# Fields marked "VERIFY" must be checked by a human before the final run
+# (they are what the recipe treats as ground truth or as search hints).
+# Keys may be written in camelCase or snake_case.
+
+brand:
+  name: GymBeam Croatia
+  # Names the brand-kit folder: brand_kit/<slug>/ (logo, products, screenshots).
+  slug: gymbeamhr
+  instagramHandle: "@gymbeamhr"
+  instagramUrl: https://www.instagram.com/gymbeamhr/
+  # Official website. Its domain (and the shop domains below) are the ONLY
+  # domains the analysis web search may use as sources for facts and prices.
+  website: https://gymbeam.hr
+  # Extra official shops/catalogues on other domains, if any. VERIFY.
+  shopUrls: []
+  whyThisBrand: >-
+    Suggested first by the assignment; an active brand on the Croatian market
+    with a large public product catalogue and clean packshots that are well
+    suited for compositing real product photos, plus a consistent visual
+    identity on Instagram that makes "on-brand" measurable.
+
+# Only Croatia / Croatian captions are supported by this recipe.
+market:
+  country: HR
+  captionLanguage: hr
+
+# Products to promote (2–3). The analysis stage looks up each product on the
+# official site (page, current price, literal claims). A URL that is not a
+# real http(s) link (e.g. the TODO below) is treated as "not provided" and
+# the analysis searches the official site for the product instead.
+products:
+  - # VERIFY: exact product name and flavour as shown on gymbeam.hr.
+    name: GymBeam True Whey Protein
+    # VERIFY: paste the official product page URL.
+    url: "TODO: paste product page URL"
+    # File in brand_kit/gymbeamhr/products/ (real packshot, transparent PNG ideal).
+    imageFile: true-whey.png
+    notes: Flagship whey protein; pick one flavour and use the matching packshot.
+  - # VERIFY
+    name: GymBeam Creatine Monohydrate
+    url: "TODO: paste product page URL"
+    imageFile: creatine-monohydrate.png
+    notes: Good subject for an educational post; claims only from the product page.
+  - # VERIFY
+    name: GymBeam Protein Bar
+    url: "TODO: paste product page URL"
+    imageFile: protein-bar.png
+    notes: Snack/on-the-go angle; pick one flavour.
+
+# Who the posts are for (free text).
+audience: >-
+  Adults in Croatia (roughly 18–40) who train in the gym or do sports
+  regularly, buy supplements online, and want practical, no-nonsense
+  nutrition tips in Croatian.
+
+# One goal per post is ideal; the plan stage maps them onto posts 1–3.
+goals:
+  - "Education: explain one product category clearly (e.g. what to look for on a creatine label) to earn saves."
+  - "Engagement: spark comments with a simple, on-brand question."
+  - "Purchase intent: present a product with a clear call to action to the shop."
+
+# Inspiration and references. `url` or `file` (relative to brand_kit/<slug>/).
+references:
+  - url: https://www.instagram.com/gymbeamhr/
+    note: The brand's own feed — the main style reference (analysed via screenshots in brand_kit/gymbeamhr/instagram/).
+  - url: https://gymbeam.hr
+    note: Official shop — product facts, prices and packshots.
+
+# Extra rules. The recipe always adds its default constraints (no recurring
+# people, no invented prices/claims, Croatian captions); these are added on top.
+constraints:
+  - No discounts or promotions unless verified on the official site.
+  - English gloss of the copy is for review only and is never published.
+  - Logo and packaging must be the real files from the brand kit, never redrawn.
+
+# Anything else the planner should know (free text, optional).
+notes: Demo submission only — posts are not published.

@@ -1,0 +1,131 @@
+import type { StageDefinition } from '../pipeline/types.js';
+import { PLAN_PROMPT_VERSION, buildPlanPrompt, isPriceUsable } from '../prompts/index.js';
+import { BrandAnalysisSchema, HEX_COLOR, type BrandAnalysis } from '../schemas/analysis.js';
+import { BriefArtifactSchema } from '../schemas/brief.js';
+import {
+  ContentPlanModelSchema,
+  ContentPlanSchema,
+  SLIDE_COUNT,
+  type ContentPlan,
+  type ContentPlanModel,
+} from '../schemas/plan.js';
+import { renderPlanMd } from './markdown.js';
+
+export class PlanValidationError extends Error {
+  constructor(public readonly violations: string[]) {
+    super(`Content plan failed validation:\n${violations.map((v) => `  - ${v}`).join('\n')}`);
+    this.name = 'PlanValidationError';
+  }
+}
+
+/**
+ * Checks the model's plan against the analysis. Safe problems are fixed and
+ * reported in `fixes` (price hidden, slides renumbered, bad colours dropped);
+ * anything that would change meaning (unknown product, unverified fact, wrong
+ * slide count) throws `PlanValidationError`.
+ */
+export function validatePlan(raw: ContentPlanModel, analysis: BrandAnalysis): { plan: ContentPlan; fixes: string[] } {
+  const violations: string[] = [];
+  const fixes: string[] = [];
+
+  const numbers = raw.posts.map((p) => p.number).sort((a, b) => a - b);
+  if (raw.posts.length !== 3 || numbers.join(',') !== '1,2,3') {
+    violations.push(`expected exactly 3 posts numbered 1, 2, 3; got [${numbers.join(', ')}]`);
+  }
+
+  const products = new Map(analysis.products.map((p) => [p.name.trim().toLowerCase(), p]));
+  const facts = new Map([...analysis.brandFacts, ...analysis.products.flatMap((p) => p.claims)].map((f) => [f.id, f]));
+
+  const posts = [...raw.posts]
+    .sort((a, b) => a.number - b.number)
+    .map((post) => {
+      const label = `post ${post.number}`;
+      const range = SLIDE_COUNT[post.format];
+      if (post.slides.length < range.min || post.slides.length > range.max) {
+        const want = range.min === range.max ? `${range.min}` : `${range.min}–${range.max}`;
+        violations.push(`${label}: ${post.format} needs ${want} slide(s), got ${post.slides.length}`);
+      }
+
+      for (const id of post.factIds) {
+        const fact = facts.get(id);
+        if (!fact) violations.push(`${label}: factId "${id}" does not exist in the analysis`);
+        else if (fact.status !== 'verified') violations.push(`${label}: factId "${id}" is "${fact.status}", only verified facts may be used`);
+      }
+
+      const sorted = [...post.slides].sort((a, b) => a.index - b.index);
+      const slides = sorted.map((slide, i) => {
+        const where = `${label} slide ${i + 1}`;
+        const s = { ...slide };
+        if (s.index !== i + 1) {
+          fixes.push(`${where}: index ${s.index} renumbered to ${i + 1}`);
+          s.index = i + 1;
+        }
+
+        if (s.productName !== null && !s.productName.trim()) s.productName = null;
+        if (s.productName !== null) {
+          const product = products.get(s.productName.trim().toLowerCase());
+          if (!product) {
+            violations.push(`${where}: product "${s.productName}" is not in the analysis (known: ${analysis.products.map((p) => p.name).join(', ')})`);
+          } else {
+            s.productName = product.name;
+            if (s.showPrice && !isPriceUsable(product.price.status)) {
+              fixes.push(`${where}: showPrice forced to false — price of "${product.name}" is ${product.price.status}`);
+              s.showPrice = false;
+            }
+          }
+          if (s.layout === 'text-only') {
+            fixes.push(`${where}: layout text-only with a product changed to product-center`);
+            s.layout = 'product-center';
+          }
+        } else {
+          if (s.showPrice) {
+            fixes.push(`${where}: showPrice forced to false — slide has no product`);
+            s.showPrice = false;
+          }
+          if (s.layout !== 'text-only') {
+            fixes.push(`${where}: layout ${s.layout} without a product changed to text-only`);
+            s.layout = 'text-only';
+          }
+        }
+
+        const colors = s.brandColorsHex.map((c) => c.trim().toUpperCase());
+        const valid = colors.filter((c) => HEX_COLOR.test(c));
+        if (valid.length !== colors.length) fixes.push(`${where}: dropped invalid colours ${colors.filter((c) => !HEX_COLOR.test(c)).join(', ')}`);
+        s.brandColorsHex = [...new Set(valid)];
+        return s;
+      });
+
+      return { ...post, slides };
+    });
+
+  if (violations.length) throw new PlanValidationError(violations);
+  return { plan: ContentPlanSchema.parse({ summary: raw.summary, posts }), fixes };
+}
+
+export const planStage: StageDefinition = {
+  no: 3,
+  id: 'plan',
+  title: 'Content plan',
+  async run(ctx) {
+    const brief = ctx.store.readJson('brief', 'brief.json', BriefArtifactSchema);
+    const analysis = ctx.store.readJson('analysis', 'analysis.json', BrandAnalysisSchema);
+
+    const prompt = buildPlanPrompt({ brief, analysis });
+    ctx.store.writeJson('plan', 'prompts.json', [{ purpose: 'plan', version: PLAN_PROMPT_VERSION, ...prompt }]);
+
+    const res = await ctx.ai.structured({
+      purpose: 'plan',
+      schema: ContentPlanModelSchema,
+      schemaName: 'content_plan',
+      ...prompt,
+      model: 'text',
+    });
+
+    const { plan, fixes } = validatePlan(res.data, analysis);
+    for (const f of fixes) ctx.log(`plan fix: ${f}`);
+
+    ctx.store.writeJson('plan', 'plan.json', plan);
+    ctx.store.writeText('plan', 'plan.md', renderPlanMd(plan, analysis, fixes));
+    ctx.log(`plan: ${plan.posts.map((p) => `#${p.number} ${p.format}/${p.goal}`).join(', ')}`);
+  },
+};
