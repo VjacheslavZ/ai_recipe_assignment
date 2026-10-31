@@ -44,7 +44,6 @@ export function PostsDesk({ runId, revision }: { runId: string; revision: number
 
 function PostProof({ post }: { post: PostView }) {
   const [current, setCurrent] = useState(0);
-  const [lang, setLang] = useState<'hr' | 'en'>('hr');
   const track = useRef<HTMLDivElement>(null);
   const slide = post.slides[current];
 
@@ -59,7 +58,6 @@ function PostProof({ post }: { post: PostView }) {
     if (el) setCurrent(Math.round(el.scrollLeft / el.clientWidth));
   };
 
-  const caption = lang === 'hr' ? post.instagramText : post.captionEn;
   const check = post.captionCheck;
 
   return (
@@ -89,7 +87,7 @@ function PostProof({ post }: { post: PostView }) {
               <img
                 key={s.index}
                 src={s.url}
-                alt={`Slide ${s.index}: ${s.headlineEn}`}
+                alt={`Slide ${s.index}: ${s.headline}`}
                 className="block w-full shrink-0 snap-center object-cover"
                 loading="lazy"
               />
@@ -125,7 +123,7 @@ function PostProof({ post }: { post: PostView }) {
               </span>
             )}
           </div>
-          <p className="mt-1 text-ink-soft">{slide.headlineEn}</p>
+          <p className="mt-1 text-ink-soft">{slide.headline}</p>
           {slide.qa && slide.qa.attempts > 1 && <p className="mt-1 text-xs text-amber">Regenerated once after QA; the better attempt is shown.</p>}
           {slide.qa && slide.qa.issues.length > 0 && (
             <ul className={`mt-2 list-disc pl-5 text-xs ${slide.qa.passed ? 'text-ink-soft' : 'text-pencil'}`}>
@@ -139,27 +137,11 @@ function PostProof({ post }: { post: PostView }) {
 
       {/* Caption */}
       <div className="mt-4 rounded-md bg-paper px-4 py-3">
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold">Caption</span>
-          <div className="flex rounded-md bg-desk p-0.5 text-xs" role="group" aria-label="Caption language">
-            {(['hr', 'en'] as const).map((l) => (
-              <button
-                key={l}
-                onClick={() => setLang(l)}
-                aria-pressed={lang === l}
-                className={`rounded px-2 py-1 font-medium ${lang === l ? 'bg-paper text-ink' : 'text-ink-soft'}`}
-              >
-                {l === 'hr' ? 'Croatian' : 'English'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <p className="mt-2 max-h-60 overflow-y-auto text-sm leading-relaxed whitespace-pre-wrap">{caption}</p>
-        {lang === 'hr' && (
-          <button onClick={() => void navigator.clipboard?.writeText(post.instagramText)} className="mt-2 text-xs font-medium text-active underline underline-offset-2">
-            Copy for Instagram
-          </button>
-        )}
+        <span className="text-sm font-semibold">Caption</span>
+        <p className="mt-2 max-h-60 overflow-y-auto text-sm leading-relaxed whitespace-pre-wrap">{post.instagramText}</p>
+        <button onClick={() => void navigator.clipboard?.writeText(post.instagramText)} className="mt-2 text-xs font-medium text-active underline underline-offset-2">
+          Copy for Instagram
+        </button>
         {check && (
           <div className={`mt-3 border-t border-rule pt-2 text-xs ${check.passed ? 'text-pass' : 'text-pencil'}`}>
             {check.passed ? 'Every claim matches a verified fact.' : 'The fact check flagged this caption.'}

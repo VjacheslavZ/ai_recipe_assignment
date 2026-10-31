@@ -37,7 +37,7 @@ describe('parseBriefYaml', () => {
     expect(brief.brand.instagramHandle).toBe('@testbrand');
     expect(brief.brand.instagramUrl).toBe('https://www.instagram.com/testbrand/');
     expect(brief.brand.shopUrls).toEqual([]);
-    expect(brief.market).toEqual({ country: 'HR', captionLanguage: 'hr' });
+    expect(brief.market).toEqual({ country: 'HR' });
     expect(brief.products[0]).toEqual({ name: 'Widget', url: null, imageFile: null, notes: null });
     expect(brief.references).toEqual([]);
     expect(brief.constraints).toEqual([...DEFAULT_CONSTRAINTS]);

@@ -181,7 +181,7 @@ export function mergeAnalysis(input: MergeInput): BrandAnalysis {
     productPresentation: instagram?.productPresentation ?? unknown,
     peoplePresentation: instagram?.peoplePresentation ?? unknown,
     captionStyle: instagram?.captionStyle ?? {
-      length: unknown, emojis: unknown, hashtags: unknown, ctaPatterns: [], language: 'hr (from brief)',
+      length: unknown, emojis: unknown, hashtags: unknown, ctaPatterns: [], language: 'unknown (posts are written in English)',
     },
     brandFacts: [...siteFacts, ...igFacts],
     products,

@@ -3,7 +3,7 @@ import type { PostPlan, SlidePlan } from '../schemas/plan.js';
 import { isPriceUsable } from './plan.js';
 import { bullets, sections, type BuiltPrompt } from './shared.js';
 
-export const REVIEW_PROMPT_VERSION = 'review@1';
+export const REVIEW_PROMPT_VERSION = 'review@3';
 
 /** Stage 05 — vision QA of one finished slide against the plan and the brand analysis. */
 export function buildSlideReviewPrompt(opts: {
@@ -35,7 +35,7 @@ ${bullets([
 - Typography: ${analysis.visualStyle.typography}`,
     `## This slide
 - Post ${post.number} (${post.format}), goal: ${post.goal}; slide ${slide.index}, role: ${slide.role}
-- Planned headline (Croatian): "${slide.headlineHr}"${slide.subtextHr ? `\n- Planned subtext (Croatian): "${slide.subtextHr}"` : ''}
+- Planned headline: "${slide.headline}"${slide.subtext ? `\n- Planned subtext: "${slide.subtext}"` : ''}
 - Product: ${slide.productName ?? 'none'}; layout: ${slide.layout}; price shown: ${slide.showPrice ? 'yes' : 'no'}`,
     'The first attached image is the finished slide.',
   );
@@ -47,16 +47,20 @@ function factLine(f: Fact): string {
 }
 
 /** Stage 05 — fact check of one caption: every factual claim must be backed by a verified fact. */
-export function buildCaptionReviewPrompt(opts: { analysis: BrandAnalysis; post: PostPlan; instagramText: string }): BuiltPrompt {
+export function buildCaptionReviewPrompt(opts: {
+  analysis: BrandAnalysis;
+  post: PostPlan;
+  instagramText: string;
+}): BuiltPrompt {
   const { analysis, post, instagramText } = opts;
   const verified = [...analysis.brandFacts, ...analysis.products.flatMap((p) => p.claims)].filter((f) => f.status === 'verified');
   const prices = analysis.products
     .filter((p) => isPriceUsable(p.price.status) && p.price.amount !== null)
     .map((p) => `- ${p.name}: ${p.price.amount} ${p.price.currency ?? 'EUR'} (${p.price.status})`);
   const system = sections(
-    `You are a fact checker for ${analysis.brandName}'s Instagram captions (Croatian). Nothing may be published that the brand cannot back up.`,
+    `You are a fact checker for ${analysis.brandName}'s Instagram captions (English). Nothing may be published that the brand cannot back up.`,
     `## Task
-List every factual claim in the caption (product properties, ingredients, effects, prices, discounts, awards, statements attributed to people). For each, give the id of the verified fact that supports it, or null and supported=false. Opinions, questions, invitations and CTAs are not claims. Also list Croatian spelling or grammar problems.`,
+List every factual claim in the caption (product properties, ingredients, effects, prices, discounts, awards, statements attributed to people). For each, give the id of the verified fact that supports it, or null and supported=false. Opinions, questions, invitations and CTAs are not claims. Also list English spelling or grammar problems.`,
     `## Rules
 ${bullets([
   'Only the verified facts and usable prices listed below count as support. General knowledge does not.',

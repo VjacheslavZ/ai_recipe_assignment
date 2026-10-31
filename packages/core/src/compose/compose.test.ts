@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { canvasFor, composeSlide, cutOutWhite, formatPriceHr, layoutBoxes, pickAccent, type Box, type ComposeInput } from './compose.js';
+import { canvasFor, composeSlide, cutOutWhite, formatPrice, layoutBoxes, pickAccent, type Box, type ComposeInput } from './compose.js';
 
 const solid = (width: number, height: number, background: string) =>
   sharp({ create: { width, height, channels: 3, background } }).png().toBuffer();
@@ -108,9 +108,9 @@ describe('cutOutWhite', () => {
 });
 
 describe('helpers', () => {
-  it('formats prices the Croatian way', () => {
-    expect(formatPriceHr(29.9, 'EUR')).toBe('29,90 €');
-    expect(formatPriceHr(1234.5, null)).toBe('1.234,50 €');
+  it('formats prices in English', () => {
+    expect(formatPrice(29.9, 'EUR')).toBe('€29.90');
+    expect(formatPrice(1234.5, null)).toBe('€1,234.50');
   });
 
   it('picks a saturated brand colour as accent', () => {

@@ -16,7 +16,7 @@ export const SlideReviewModelSchema = z.object({
     'the product looks like the reference photo — shape, colours, label and logo not distorted; 5 if the slide has no product',
   ),
   goalFit: criterion("the slide supports the post's goal and role"),
-  textCorrectness: criterion('on-image text is exactly the planned copy, spelled correctly incl. Croatian diacritics, no extra/garbled text'),
+  textCorrectness: criterion('on-image text is exactly the planned copy, spelled correctly incl. diacritics, no extra/garbled text'),
   issues: z.array(z.string()).describe('Concrete problems, empty if none.'),
   backgroundFix: z
     .string()
@@ -35,7 +35,7 @@ export const CaptionReviewModelSchema = z.object({
       }),
     )
     .describe('Every factual claim in the caption. Opinions, questions and CTAs are not claims.'),
-  languageIssues: z.array(z.string()).describe('Spelling/grammar problems in the Croatian caption, empty if none.'),
+  languageIssues: z.array(z.string()).describe('Spelling/grammar problems in the caption, empty if none.'),
   verdict: z.enum(['ok', 'needs_fix']),
 });
 export type CaptionReviewModel = z.infer<typeof CaptionReviewModelSchema>;

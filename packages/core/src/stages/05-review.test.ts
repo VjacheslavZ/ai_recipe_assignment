@@ -54,9 +54,10 @@ describe('slideScore', () => {
 describe('checkCaptionPrices', () => {
   const analysis = { products: [{ name: 'X', url: null, claims: [], price: { amount: 29.9, currency: 'EUR', status: 'verified', retrievedAt: null, sourceUrl: null, confirmedBy: null, confirmedAt: null, note: null } }] } as unknown as BrandAnalysis;
   it('accepts usable prices and flags any other price', () => {
-    expect(checkCaptionPrices('Samo 29,90 € danas!', analysis)).toEqual([]);
-    expect(checkCaptionPrices('Samo 19,90 € danas!', analysis)).toHaveLength(1);
-    expect(checkCaptionPrices('Bez cijene.', analysis)).toEqual([]);
+    expect(checkCaptionPrices('Only €29.90 today!', analysis)).toEqual([]);
+    expect(checkCaptionPrices('Only €19.90 today!', analysis)).toHaveLength(1);
+    expect(checkCaptionPrices('Now 29,90 € and 19.90 EUR', analysis)).toHaveLength(1);
+    expect(checkCaptionPrices('No price here.', analysis)).toEqual([]);
   });
 });
 

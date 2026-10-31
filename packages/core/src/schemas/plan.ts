@@ -23,10 +23,8 @@ export const SLIDE_COUNT: Record<PostFormat, { min: number; max: number }> = {
 const slideShape = {
   index: z.number().describe('1-based position of the slide/frame within the post.'),
   role: z.string().describe('Purpose of the slide, e.g. hook, tip, product, cta.'),
-  headlineHr: z.string().describe('On-image headline in Croatian, short (max ~7 words).'),
-  headlineEn: z.string().describe('English gloss of the headline.'),
-  subtextHr: z.string().nullable().describe('Optional on-image supporting line in Croatian.'),
-  subtextEn: z.string().nullable().describe('English gloss of subtextHr.'),
+  headline: z.string().describe('On-image headline in English, short (max ~7 words).'),
+  subtext: z.string().nullable().describe('Optional on-image supporting line in English.'),
   productName: z.string().nullable().describe('Exact product name from the analysis, or null for no product.'),
   showPrice: z.boolean().describe('true only if the product price is marked as usable in the analysis.'),
   backgroundPrompt: z
@@ -42,10 +40,9 @@ const postShape = {
   goal: PostGoalSchema,
   concept: z.string(),
   rationale: z.string().describe('Why this fits the brand, referencing analysis findings and fact ids.'),
-  captionHr: z.string().describe('Instagram caption in Croatian.'),
-  captionEn: z.string().describe('English gloss of the caption.'),
+  caption: z.string().describe('Instagram caption in English.'),
   hashtags: z.array(z.string()),
-  cta: z.string().describe('Call to action in Croatian.'),
+  cta: z.string().describe('Call to action in English.'),
   factIds: z.array(z.string()).describe('Ids of verified facts this post relies on.'),
 };
 

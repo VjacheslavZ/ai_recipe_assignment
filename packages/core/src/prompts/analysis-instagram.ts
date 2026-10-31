@@ -29,7 +29,7 @@ ${bullets([
   'Observations seen directly in a screenshot are "verified"; generalisations across the account beyond what the screenshots show are "assumption".',
   'If a screenshot is unreadable or irrelevant, list it in "screenshotsUnreadable" with the reason.',
   'Do not identify or name real people shown in the images.',
-  'Write the analysis in English; quote Croatian caption text verbatim where useful.',
+  'Write the analysis in English; quote caption text verbatim (in its original language) where useful.',
 ])}`,
     `## Output
 Return JSON matching the provided schema. Be specific and concrete — "bold white uppercase sans-serif headline top-left over dark photo" beats "modern typography".`,
@@ -37,7 +37,7 @@ Return JSON matching the provided schema. Be specific and concrete — "bold whi
 
   const input = sections(
     `Brand: ${brief.brand.name} (${brief.brand.instagramHandle}, ${brief.brand.instagramUrl})`,
-    `Market: Croatia; captions are expected in Croatian.`,
+    `Market: Croatia; the new posts will be written in English.`,
     `Attached screenshots, in order: ${screenshotFiles.join(', ')}`,
   );
 

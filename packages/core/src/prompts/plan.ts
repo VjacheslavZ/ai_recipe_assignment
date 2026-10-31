@@ -2,7 +2,7 @@ import type { BrandAnalysis, Fact } from '../schemas/analysis.js';
 import type { Brief } from '../schemas/brief.js';
 import { bullets, sections, type BuiltPrompt } from './shared.js';
 
-export const PLAN_PROMPT_VERSION = 'plan@1';
+export const PLAN_PROMPT_VERSION = 'plan@3';
 
 export interface PlanPromptInput {
   brief: Brief;
@@ -21,7 +21,7 @@ function factLine(f: Fact): string {
 /** Stage 03 — plan three Instagram posts from the brief and the merged brand analysis. */
 export function buildPlanPrompt({ brief, analysis }: PlanPromptInput): BuiltPrompt {
   const system = sections(
-    `You are the lead content strategist and Croatian copywriter for ${brief.brand.name}'s Instagram (${brief.brand.instagramHandle}).
+    `You are the lead content strategist and copywriter for ${brief.brand.name}'s Instagram (${brief.brand.instagramHandle}).
 You plan posts that a designer will produce by compositing REAL product photos and the real logo onto AI-generated backgrounds, with your headlines set as text on top.`,
     `## Task
 Plan exactly three Instagram posts, numbered 1, 2 and 3. For each choose a goal, a format and a concept, write the on-image copy for every slide/frame, the caption and a short rationale.`,
@@ -38,7 +38,7 @@ ${bullets([
   '"productName" must be exactly one of the product names listed in the input, or null for a slide without a product. Use layout "text-only" when productName is null.',
   'People: no recurring people or influencers. Backgrounds may include at most anonymous, non-identifiable people (no faces).',
   '"backgroundPrompt": an English prompt for an image model describing only the scene/surface/lighting/mood in the brand\'s photo style and colours. It must NOT contain the product, packaging, any text, letters, logos or faces. Leave clear empty space where the product and headline will be placed (match the layout).',
-  'Copy: Croatian (hr), natural and idiomatic as a native Croatian social-media copywriter would write it, matching the brand tone and caption style from the analysis. Headlines short (max ~7 words), subtext max ~15 words. Always give an accurate English gloss.',
+  'Copy: English, natural and idiomatic social-media copy matching the brand tone and caption style from the analysis (even when the account posts in another language). Headlines short (max ~7 words), subtext max ~15 words.',
   'Captions: follow the analysed caption style (length, emojis, hashtags, CTA patterns). 3–8 relevant hashtags including the brand hashtag if the analysis shows one.',
   '"brandColorsHex": pick from the analysed brand colours.',
   'Rationale: 2–4 sentences explaining why the concept fits this brand and audience, referencing specific analysis findings (tone, pillars, visual style) and fact ids.',

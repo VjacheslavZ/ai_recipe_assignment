@@ -66,8 +66,7 @@ export type RunEvent =
 export interface SlideView {
   index: number;
   role: string;
-  headlineHr: string;
-  headlineEn: string;
+  headline: string;
   url: string;
   qa: { score: number; passed: boolean; attempts: number; issues: string[] } | null;
 }
@@ -78,8 +77,7 @@ export interface PostView {
   goal: string;
   concept: string;
   rationale: string;
-  captionHr: string;
-  captionEn: string;
+  caption: string;
   instagramText: string;
   captionCheck: { passed: boolean; claims: { text: string; supported: boolean; factId: string | null }[]; languageIssues: string[]; codeIssues: string[] } | null;
   slides: SlideView[];

@@ -5,7 +5,7 @@ export const DEFAULT_CONSTRAINTS = [
   'No recurring people or influencers; people only as anonymous, non-identifiable background elements.',
   'No invented product properties, prices or quotes; only facts verified on official sources.',
   'Prices only when verified on the official site (URL + date) or confirmed by the user.',
-  'Captions in Croatian (hr), natural and on-brand.',
+  'All post copy (on-image text and captions) in English, natural and on-brand.',
 ] as const;
 
 const slugSchema = z
@@ -48,7 +48,6 @@ export const BriefInputSchema = z.object({
   market: z
     .object({
       country: z.literal('HR').default('HR'),
-      captionLanguage: z.literal('hr').default('hr'),
     })
     .nullish(),
   products: z.array(productInputSchema).min(1, 'list at least one product to promote'),
@@ -84,7 +83,7 @@ export const BriefSchema = z.object({
     shopUrls: z.array(z.url()),
     whyThisBrand: z.string().min(1),
   }),
-  market: z.object({ country: z.literal('HR'), captionLanguage: z.literal('hr') }),
+  market: z.object({ country: z.literal('HR') }),
   products: z.array(BriefProductSchema).min(1),
   audience: z.string().min(1),
   goals: z.array(z.string().min(1)).min(1),
@@ -199,7 +198,7 @@ export function normalizeBrief(raw: unknown): { brief: Brief; warnings: string[]
       shopUrls,
       whyThisBrand: input.brand.whyThisBrand,
     },
-    market: { country: 'HR', captionLanguage: 'hr' },
+    market: { country: 'HR' },
     products,
     audience: input.audience,
     goals: input.goals,

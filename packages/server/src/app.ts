@@ -225,9 +225,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           goal: p.goal,
           concept: p.concept,
           rationale: p.rationale,
-          captionHr: p.captionHr,
-          captionEn: p.captionEn,
-          instagramText: caption?.instagramText ?? p.captionHr,
+          caption: p.caption,
+          instagramText: caption?.instagramText ?? p.caption,
           captionCheck: captionReview,
           slides: p.slides.map((s) => {
             const qa = review?.slides.find((x) => x.post === p.number && x.slide === s.index) ?? null;
@@ -235,8 +234,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
             return {
               index: s.index,
               role: s.role,
-              headlineHr: s.headlineHr,
-              headlineEn: s.headlineEn,
+              headline: s.headline,
               url: file(review ? `05_review/posts/post_${p.number}/slide_${s.index}.png` : `04_create/post_${p.number}/slide_${s.index}.png`),
               qa: chosen ? { score: chosen.score, passed: qa!.passed, attempts: qa!.attempts.length, issues: chosen.issues } : null,
             };

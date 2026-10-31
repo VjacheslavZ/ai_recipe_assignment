@@ -303,8 +303,8 @@ export async function composeSlide(input: ComposeInput): Promise<ComposeResult> 
   return { png, layout, placed };
 }
 
-/** Croatian price format, e.g. 29.9 EUR → "29,90 €". */
-export function formatPriceHr(amount: number, currency: string | null): string {
-  const n = amount.toLocaleString('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return !currency || currency.toUpperCase() === 'EUR' ? `${n} €` : `${n} ${currency.toUpperCase()}`;
+/** English price format, e.g. 29.9 EUR → "€29.90". */
+export function formatPrice(amount: number, currency: string | null): string {
+  const n = amount.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return !currency || currency.toUpperCase() === 'EUR' ? `€${n}` : `${n} ${currency.toUpperCase()}`;
 }

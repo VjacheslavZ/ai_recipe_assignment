@@ -49,9 +49,9 @@ describe('createStage', () => {
 
 describe('buildInstagramText', () => {
   it('appends CTA and hashtags once', () => {
-    expect(buildInstagramText({ captionHr: 'Tekst.', cta: 'Spremi objavu', hashtags: ['gymbeam', '#fitness'] })).toBe(
+    expect(buildInstagramText({ caption: 'Tekst.', cta: 'Spremi objavu', hashtags: ['gymbeam', '#fitness'] })).toBe(
       'Tekst.\n\nSpremi objavu\n\n#gymbeam #fitness',
     );
-    expect(buildInstagramText({ captionHr: 'Tekst. Spremi objavu', cta: 'Spremi objavu', hashtags: [] })).toBe('Tekst. Spremi objavu');
+    expect(buildInstagramText({ caption: 'Tekst. Spremi objavu', cta: 'Spremi objavu', hashtags: [] })).toBe('Tekst. Spremi objavu');
   });
 });

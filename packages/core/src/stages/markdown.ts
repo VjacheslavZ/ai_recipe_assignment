@@ -16,7 +16,7 @@ export function renderBriefMd(b: BriefArtifact): string {
 | Instagram | [${b.brand.instagramHandle}](${b.brand.instagramUrl}) |
 | Website | ${link(b.brand.website)} |
 | Shops | ${b.brand.shopUrls.map(link).join(', ') || '—'} |
-| Market | ${b.market.country}, captions in \`${b.market.captionLanguage}\` |
+| Market | ${b.market.country}, posts in English |
 
 **Why this brand:** ${b.brand.whyThisBrand}
 
@@ -110,8 +110,8 @@ export function renderPlanMd(plan: ContentPlan, analysis: BrandAnalysis, fixes: 
   const posts = plan.posts.map((p) => {
     const slides = p.slides
       .map((s) => {
-        const sub = s.subtextHr ? `\n   - Subtext: ${s.subtextHr} _(${s.subtextEn ?? '—'})_` : '';
-        return `${s.index}. **${s.role}** — ${s.headlineHr} _(${s.headlineEn})_${sub}
+        const sub = s.subtext ? `\n   - Subtext: ${s.subtext}` : '';
+        return `${s.index}. **${s.role}** — ${s.headline}${sub}
    - Product: ${s.productName ?? '—'}${s.showPrice ? ' · shows price' : ''} · layout \`${s.layout}\` · colours ${s.brandColorsHex.join(', ') || '—'}
    - Background prompt: ${s.backgroundPrompt}`;
       })
@@ -126,15 +126,12 @@ export function renderPlanMd(plan: ContentPlan, analysis: BrandAnalysis, fixes: 
 ### ${p.format === 'story' ? 'Frames' : 'Slides'}
 ${slides}
 
-### Caption (HR)
-${p.captionHr}
+### Caption
+${p.caption}
 
 ${p.hashtags.join(' ')}
 
 **CTA:** ${p.cta}
-
-### Caption — English gloss
-${p.captionEn}
 
 ### Facts used
 ${list(usedFacts)}
@@ -150,7 +147,7 @@ ${posts.join('\n')}${fixes.length ? `\n## Automatic fixes applied during validat
 /** `04_create/POSTS.md`: the finished posts 1–3 with slides in order, format, goal, rationale and copy. */
 export function renderPostsMd(
   plan: ContentPlan,
-  captions: { post: number; slides: string[]; instagramText: string; captionEn: string }[],
+  captions: { post: number; slides: string[]; instagramText: string }[],
 ): string {
   const posts = plan.posts.map((p) => {
     const c = captions.find((x) => x.post === p.number);
@@ -163,13 +160,10 @@ export function renderPostsMd(
 
 ${slides}
 
-### Caption (HR, ready to paste)
+### Caption (ready to paste)
 \`\`\`
-${c?.instagramText ?? p.captionHr}
+${c?.instagramText ?? p.caption}
 \`\`\`
-
-### English gloss
-${p.captionEn}
 `;
   });
   return `# Finished posts

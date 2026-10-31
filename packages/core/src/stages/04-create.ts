@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { canvasFor, composeSlide, formatPriceHr, type ComposeResult } from '../compose/compose.js';
+import { canvasFor, composeSlide, formatPrice, type ComposeResult } from '../compose/compose.js';
 import type { StageContext, StageDefinition } from '../pipeline/types.js';
 import { BACKGROUND_PROMPT_VERSION, buildBackgroundPrompt, isPriceUsable } from '../prompts/index.js';
 import { BrandAnalysisSchema, type BrandAnalysis } from '../schemas/analysis.js';
@@ -33,8 +33,7 @@ export interface CaptionRecord {
   format: PostPlan['format'];
   goal: PostPlan['goal'];
   slides: string[];
-  captionHr: string;
-  captionEn: string;
+  caption: string;
   hashtags: string[];
   cta: string;
   /** Ready to paste into Instagram: caption + CTA + hashtags. */
@@ -60,9 +59,9 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return out;
 }
 
-export function buildInstagramText(post: Pick<PostPlan, 'captionHr' | 'cta' | 'hashtags'>): string {
+export function buildInstagramText(post: Pick<PostPlan, 'caption' | 'cta' | 'hashtags'>): string {
   const tags = post.hashtags.map((t) => (t.startsWith('#') ? t : `#${t}`)).join(' ');
-  const caption = post.captionHr.trim();
+  const caption = post.caption.trim();
   // The planner often already ends the caption with the CTA; don't repeat it.
   const withCta = caption.includes(post.cta.trim()) ? caption : `${caption}\n\n${post.cta.trim()}`;
   return tags && !withCta.includes(tags) ? `${withCta}\n\n${tags}` : withCta;
@@ -72,7 +71,7 @@ function priceLabel(slide: SlidePlan, analysis: BrandAnalysis): string | null {
   if (!slide.showPrice || !slide.productName) return null;
   const product = analysis.products.find((p) => p.name === slide.productName);
   if (!product || !isPriceUsable(product.price.status) || product.price.amount === null) return null;
-  return formatPriceHr(product.price.amount, product.price.currency);
+  return formatPrice(product.price.amount, product.price.currency);
 }
 
 function readOptional(file: string | null): Buffer | null {
@@ -114,8 +113,8 @@ export async function composeJob(
     canvas: canvasFor(post.format),
     layout: slide.layout,
     background,
-    headline: slide.headlineHr,
-    subtext: slide.subtextHr,
+    headline: slide.headline,
+    subtext: slide.subtext,
     priceLabel: label,
     product,
     productPlaceholder: slide.productName,
@@ -192,8 +191,7 @@ export const createStage: StageDefinition = {
       format: post.format,
       goal: post.goal,
       slides: post.slides.map((s) => `${postDir(post.number)}/slide_${s.index}.png`),
-      captionHr: post.captionHr,
-      captionEn: post.captionEn,
+      caption: post.caption,
       hashtags: post.hashtags,
       cta: post.cta,
       instagramText: buildInstagramText(post),

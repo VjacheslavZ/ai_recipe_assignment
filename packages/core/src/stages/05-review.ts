@@ -28,7 +28,8 @@ export function slideScore(m: SlideReviewModel): Pick<SlideAttempt, 'score' | 's
   return { score: Math.round(((mean - 1) / 4) * 100) / 10, scores };
 }
 
-const PRICE_RE = /(\d{1,4}(?:[.,]\d{1,2})?)\s?(€|eur\b|euro|kn\b)/gi;
+// Amount before or after the currency: "€29.90", "29.90 EUR", "29,90 €".
+const PRICE_RE = /(?:€\s?(\d{1,4}(?:[.,]\d{1,2})?))|(?:(\d{1,4}(?:[.,]\d{1,2})?)\s?(?:€|eur\b|euro|kn\b))/gi;
 
 /** Code-level caption check, independent of the model: every price in the text must be a usable price. */
 export function checkCaptionPrices(text: string, analysis: BrandAnalysis): string[] {
@@ -37,7 +38,7 @@ export function checkCaptionPrices(text: string, analysis: BrandAnalysis): strin
     .map((p) => p.price.amount!);
   const issues: string[] = [];
   for (const m of text.matchAll(PRICE_RE)) {
-    const amount = Number(m[1]!.replace(',', '.'));
+    const amount = Number((m[1] ?? m[2])!.replace(',', '.'));
     if (!usable.some((u) => Math.abs(u - amount) < 0.005)) {
       issues.push(`price "${m[0]}" is not a verified or user-confirmed price`);
     }
@@ -51,7 +52,14 @@ function productReference(brandKitDir: string, brief: BriefArtifact, productName
   return file ? path.join(brandKitDir, brief.brand.slug, 'products', file) : null;
 }
 
-async function reviewSlide(ctx: StageContext, job: SlideJob, analysis: BrandAnalysis, slidePath: string, reference: string | null, attempt: number) {
+async function reviewSlide(
+  ctx: StageContext,
+  job: SlideJob,
+  analysis: BrandAnalysis,
+  slidePath: string,
+  reference: string | null,
+  attempt: number,
+) {
   const prompt = buildSlideReviewPrompt({ analysis, post: job.post, slide: job.slide, hasProductReference: Boolean(reference) });
   const res = await ctx.ai.structured({
     purpose: `review.slide.p${job.post.number}s${job.slide.index}${attempt ? `.r${attempt}` : ''}`,
@@ -130,7 +138,7 @@ export const reviewStage: StageDefinition = {
 
     const captionResults: CaptionResult[] = [];
     for (const post of plan.posts) {
-      const text = captions.find((c) => c.post === post.number)?.instagramText ?? post.captionHr;
+      const text = captions.find((c) => c.post === post.number)?.instagramText ?? post.caption;
       const res = await ctx.ai.structured({
         purpose: `review.caption.p${post.number}`,
         schema: CaptionReviewModelSchema,
