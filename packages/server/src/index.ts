@@ -21,7 +21,7 @@ process.on('SIGTERM', () => void shutdown());
 
 try {
   worker.start();
-  await app.listen({ port: config.PORT, host: '127.0.0.1' });
+  await app.listen({ port: config.PORT, host: config.HOST });
   app.log.info(`AI provider: ${config.AI_PROVIDER} · runs: ${config.RUNS_DIR} · db: ${config.DATABASE_PATH}`);
 } catch (err) {
   app.log.error(err);

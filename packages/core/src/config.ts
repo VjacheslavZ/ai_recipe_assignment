@@ -32,6 +32,10 @@ export const envSchema = z.object({
   RUNS_DIR: z.string().min(1).default('./runs'),
   BRAND_KIT_DIR: z.string().min(1).default('./brand_kit'),
   PORT: z.coerce.number().int().positive().default(3001),
+  // 127.0.0.1 locally; the Docker image sets 0.0.0.0 so the port can be published.
+  HOST: z.string().min(1).default('127.0.0.1'),
+  // Built web UI; when it exists the API server also serves it (one process in Docker).
+  WEB_DIST_DIR: z.string().min(1).default('./packages/web/dist'),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -58,6 +62,7 @@ export function parseConfig(env: Record<string, string | undefined>, rootDir = f
     DATABASE_PATH: abs(e.DATABASE_PATH),
     RUNS_DIR: abs(e.RUNS_DIR),
     BRAND_KIT_DIR: abs(e.BRAND_KIT_DIR),
+    WEB_DIST_DIR: abs(e.WEB_DIST_DIR),
   };
 }
 

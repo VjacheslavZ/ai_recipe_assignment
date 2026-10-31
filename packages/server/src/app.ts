@@ -1,4 +1,4 @@
-import { cpSync, createReadStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import multipart from '@fastify/multipart';
 import {
@@ -39,6 +39,12 @@ const MIME: Record<string, string> = {
   '.yaml': 'text/yaml; charset=utf-8',
   '.jsonl': 'application/x-ndjson; charset=utf-8',
   '.zip': 'application/zip',
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
 };
 
 const STAGE_ARTIFACT: Record<Stage, string> = {
@@ -54,6 +60,20 @@ const IMAGE_EXT = /\.(png|jpe?g|webp)$/i;
 /** Keeps only the file name and a safe character set (uploads land inside the run folder). */
 function safeName(name: string): string {
   return path.basename(name).replace(/[^\w.-]+/g, '_');
+}
+
+/**
+ * Copies a folder file by file. fs.cpSync fails with EACCES when the target is a Docker Desktop
+ * bind mount (runs/ in compose.yaml), while plain copyFileSync works there.
+ */
+function copyDir(from: string, to: string): void {
+  mkdirSync(to, { recursive: true });
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    const src = path.join(from, entry.name);
+    const dest = path.join(to, entry.name);
+    if (entry.isDirectory()) copyDir(src, dest);
+    else if (entry.isFile()) copyFileSync(src, dest);
+  }
 }
 
 function sendFile(reply: FastifyReply, file: string) {
@@ -115,7 +135,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       brandKitDir = path.join(store.runDir, 'brand_kit');
       const kit = path.join(brandKitDir, slug);
       const repoKit = path.join(config.BRAND_KIT_DIR, slug);
-      if (existsSync(repoKit)) cpSync(repoKit, kit, { recursive: true });
+      if (existsSync(repoKit)) copyDir(repoKit, kit);
       for (const u of uploads) {
         const target =
           u.field === 'logo' ? path.join(kit, 'logo.png') : path.join(kit, u.field === 'products' ? 'products' : 'instagram', safeName(u.filename));
@@ -250,6 +270,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (!run) return reply.code(404).send({ error: 'run not found' });
     return openStore(run.id).writeCostReport();
   });
+
+  // The built web UI (Docker / production). In development Vite serves it and proxies /api here.
+  const webDir = path.resolve(config.WEB_DIST_DIR);
+  if (existsSync(path.join(webDir, 'index.html'))) {
+    app.get<{ Params: { '*': string } }>('/*', async (req, reply) => {
+      if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'not found' });
+      const target = path.resolve(webDir, req.params['*'] || 'index.html');
+      const inside = target.startsWith(webDir + path.sep) && existsSync(target) && statSync(target).isFile();
+      // The UI uses hash routes, so every unknown path gets the app shell.
+      return sendFile(reply, inside ? target : path.join(webDir, 'index.html'));
+    });
+  }
 
   return app;
 }

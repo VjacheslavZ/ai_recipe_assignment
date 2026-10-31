@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { findRepoRoot, parseConfig } from '@recipe/core';
@@ -13,9 +13,12 @@ const briefYaml = readFileSync(path.join(root, 'brief.example.yaml'), 'utf8');
 const closers: (() => void)[] = [];
 afterEach(() => closers.splice(0).forEach((c) => c()));
 
-async function setup(questionTimeoutMs = 20) {
+async function setup(questionTimeoutMs = 20, webDist?: string) {
   const tmp = mkdtempSync(path.join(tmpdir(), 'recipe-server-'));
-  const config = parseConfig({ AI_PROVIDER: 'mock', RUNS_DIR: path.join(tmp, 'runs'), BRAND_KIT_DIR: path.join(tmp, 'kit') }, root);
+  const config = parseConfig(
+    { AI_PROVIDER: 'mock', RUNS_DIR: path.join(tmp, 'runs'), BRAND_KIT_DIR: path.join(tmp, 'kit'), WEB_DIST_DIR: webDist ?? path.join(tmp, 'no-web') },
+    root,
+  );
   const { db, close } = openDb(':memory:');
   closers.push(close);
   const events = new RunEvents();
@@ -65,6 +68,20 @@ describe('server', () => {
     const { runId } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml } })).json<{ runId: string }>();
     const res = await app.inject(`/api/runs/${runId}/files/..%2F..%2F.env`);
     expect(res.statusCode).toBe(404);
+  });
+
+  it('serves the built web UI with an app-shell fallback, but never for unknown API paths', async () => {
+    const web = mkdtempSync(path.join(tmpdir(), 'recipe-web-'));
+    mkdirSync(path.join(web, 'assets'));
+    writeFileSync(path.join(web, 'index.html'), '<!doctype html><title>Post Recipe</title>');
+    writeFileSync(path.join(web, 'assets', 'app.js'), 'console.log(1)');
+    const { app } = await setup(20, web);
+    expect((await app.inject('/')).body).toContain('Post Recipe');
+    const js = await app.inject('/assets/app.js');
+    expect(js.headers['content-type']).toContain('text/javascript');
+    expect((await app.inject('/some/route')).body).toContain('Post Recipe');
+    expect((await app.inject('/..%2F..%2Fpackage.json')).body).toContain('Post Recipe');
+    expect((await app.inject('/api/nope')).statusCode).toBe(404);
   });
 
   it('streams stage events and lets a human answer the price question through the API', async () => {
