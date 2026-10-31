@@ -39,12 +39,6 @@ const MIME: Record<string, string> = {
   '.yaml': 'text/yaml; charset=utf-8',
   '.jsonl': 'application/x-ndjson; charset=utf-8',
   '.zip': 'application/zip',
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
 };
 
 const STAGE_ARTIFACT: Record<Stage, string> = {
@@ -286,18 +280,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (!run) return reply.code(404).send({ error: 'run not found' });
     return openStore(run.id).writeCostReport();
   });
-
-  // The built web UI (Docker / production). In development Vite serves it and proxies /api here.
-  const webDir = path.resolve(config.WEB_DIST_DIR);
-  if (existsSync(path.join(webDir, 'index.html'))) {
-    app.get<{ Params: { '*': string } }>('/*', async (req, reply) => {
-      if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'not found' });
-      const target = path.resolve(webDir, req.params['*'] || 'index.html');
-      const inside = target.startsWith(webDir + path.sep) && existsSync(target) && statSync(target).isFile();
-      // The UI uses hash routes, so every unknown path gets the app shell.
-      return sendFile(reply, inside ? target : path.join(webDir, 'index.html'));
-    });
-  }
 
   return app;
 }

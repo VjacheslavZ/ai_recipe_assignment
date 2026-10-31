@@ -54,7 +54,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     log('All stages are already done; nothing to run.');
     return { ran: [], costReport: store.writeCostReport() };
   }
-  for (const [name, n] of [['--from-step', fromStep], ['--to-step', toStep]] as const) {
+  for (const [name, n] of [['Start step', fromStep], ['End step', toStep]] as const) {
     if (!stages.some((s) => s.no === n)) {
       throw new Error(`${name} ${n} is not a valid step (valid: ${stages.map((s) => s.no).join(', ')})`);
     }
@@ -64,7 +64,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
       log(`Stages up to step ${toStep} are already done; nothing to run.`);
       return { ran: [], costReport: store.writeCostReport() };
     }
-    throw new Error(`--from-step ${fromStep} is after --to-step ${toStep}`);
+    throw new Error(`Start step ${fromStep} is after end step ${toStep}`);
   }
   const notDone = stages.filter((s) => s.no < fromStep && statusOf(s) !== 'done');
   if (notDone.length > 0) {

@@ -1,25 +1,45 @@
-# docker compose up --build  →  http://localhost:3001
+# Development: docker compose up  →  http://localhost:5173
+# The repo is mounted into both containers; the server restarts on change (tsx watch)
+# and the UI hot-reloads (Vite HMR).
+x-app: &app
+  build: .
+  image: ai-recipe-dev
+  env_file:
+    # AI_PROVIDER, OPENAI_API_KEY, model settings. Without .env the defaults apply (AI_PROVIDER=openai).
+    - path: .env
+      required: false
+  volumes:
+    - .:/app
+    # Linux node_modules from the image, kept apart from the host's.
+    - node_modules:/app/node_modules
+    - core_node_modules:/app/packages/core/node_modules
+    - server_node_modules:/app/packages/server/node_modules
+    - web_node_modules:/app/packages/web/node_modules
+
 services:
-  recipe:
-    build: .
-    ports:
-      - "3001:3001"
-    env_file:
-      # AI_PROVIDER, OPENAI_API_KEY, model settings. Without .env the image defaults apply
-      # (AI_PROVIDER=openai), so set AI_PROVIDER=mock to try it without a key.
-      - path: .env
-        required: false
+  server:
+    <<: *app
+    command: pnpm dev:server
     environment:
-      # Paths and host are fixed inside the container; they override values from .env.
-      # A separate database file: the DB stores absolute run paths, which differ from a local `pnpm dev:server`.
       HOST: 0.0.0.0
       PORT: 3001
-      DATABASE_PATH: /app/data/recipe.docker.db
-      RUNS_DIR: /app/runs
-      BRAND_KIT_DIR: /app/brand_kit
-    volumes:
-      - ./data:/app/data
-      - ./runs:/app/runs
-      - ./brand_kit:/app/brand_kit:ro
-      - ./brief.example.yaml:/app/brief.example.yaml:ro
+      # Poll for changes: inotify in the container misses saves done by rename (sed -i, "safe write" editors).
+      CHOKIDAR_USEPOLLING: "true"
     restart: unless-stopped
+
+  web:
+    <<: *app
+    command: pnpm dev:web
+    environment:
+      API_URL: http://server:3001
+    ports:
+      - "5173:5173"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  node_modules:
+  core_node_modules:
+  server_node_modules:
+  web_node_modules:

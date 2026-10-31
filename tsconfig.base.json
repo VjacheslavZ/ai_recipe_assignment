@@ -1,5 +1,5 @@
 {
-  // Shared compiler options for the Node packages (core, server, cli).
+  // Shared compiler options for the Node packages (core, server).
   // The web package has its own bundler-style tsconfig.
   "compilerOptions": {
     "target": "es2023",

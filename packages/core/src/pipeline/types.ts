@@ -2,7 +2,7 @@ import type { AiClient } from '../ai/types.js';
 import type { Config } from '../config.js';
 import type { RunStore } from '../run/store.js';
 
-/** Ordered pipeline stages; position + 1 is the step number used by --from-step/--to-step. */
+/** Ordered pipeline stages; position + 1 is the step number used by `fromStep` / `toStep`. */
 export const STAGES = ['brief', 'analysis', 'plan', 'create', 'review'] as const;
 export type Stage = (typeof STAGES)[number];
 
