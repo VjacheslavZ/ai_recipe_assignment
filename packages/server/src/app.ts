@@ -4,6 +4,7 @@ import multipart from '@fastify/multipart';
 import {
   BRIEF_INPUT_FILE,
   BriefValidationError,
+  checkOpenAiSetup,
   ContentPlanSchema,
   parseBriefYaml,
   ReviewSchema,
@@ -91,7 +92,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const findRun = (id: string) => db.select().from(runs).where(eq(runs.id, id)).get();
   const openStore = (id: string) => RunStore.open(config.RUNS_DIR, id);
 
-  app.get('/api/health', async () => ({ ok: true, provider: config.AI_PROVIDER }));
+  app.get('/api/health', async () => ({ ok: true, provider: config.AI_PROVIDER, openaiKeySet: Boolean(config.OPENAI_API_KEY) }));
+
+  /** Free pre-flight for real runs: is the key accepted and do the configured models exist? */
+  app.get('/api/openai/check', async () => checkOpenAiSetup(config));
 
   app.get('/api/example-brief', async (_req, reply) => {
     reply.type('text/yaml; charset=utf-8');
@@ -114,6 +118,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       briefYaml = (req.body as { briefYaml?: string } | undefined)?.briefYaml;
     }
     if (!briefYaml?.trim()) return reply.code(400).send({ error: 'brief YAML is required (field "brief" or JSON "briefYaml")' });
+    // Fail here, not minutes later in stage 2.
+    if (config.AI_PROVIDER === 'openai' && !config.OPENAI_API_KEY) {
+      return reply.code(400).send({ error: 'OPENAI_API_KEY is not set. Add it to .env and run: docker compose restart server' });
+    }
 
     let slug: string;
     try {

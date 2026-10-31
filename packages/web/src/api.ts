@@ -128,8 +128,25 @@ const json = (body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
+export interface ModelCheck {
+  role: 'text' | 'vision' | 'image';
+  model: string;
+  available: boolean;
+  priced: boolean;
+  shutdownDate: string | null;
+  error?: string;
+}
+
+export interface OpenAiCheck {
+  ok: boolean;
+  keySet: boolean;
+  error?: string;
+  models: ModelCheck[];
+}
+
 export const api = {
-  health: () => request<{ ok: boolean; provider: string }>('/api/health'),
+  health: () => request<{ ok: boolean; provider: string; openaiKeySet: boolean }>('/api/health'),
+  checkOpenAi: () => request<OpenAiCheck>('/api/openai/check'),
   exampleBrief: () => request<string>('/api/example-brief'),
   listRuns: () => request<RunRow[]>('/api/runs'),
   getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),

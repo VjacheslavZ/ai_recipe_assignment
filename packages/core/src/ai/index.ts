@@ -17,6 +17,8 @@ export function createAiClient(config: Config, opts: CreateAiClientOptions = {})
 }
 
 export * from './types.js';
+export { checkOpenAiSetup } from './check.js';
+export type { ModelCheck, OpenAiCheck } from './check.js';
 export { createMockClient, MOCK_SOURCES_KEY } from './mock.js';
 export { createOpenAiClient } from './openai.js';
 export { estimateCost, findPrice, PRICES, WEB_SEARCH_USD_PER_CALL } from './pricing.js';

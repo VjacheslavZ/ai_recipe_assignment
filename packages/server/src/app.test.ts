@@ -13,9 +13,9 @@ const briefYaml = readFileSync(path.join(root, 'brief.example.yaml'), 'utf8');
 const closers: (() => void)[] = [];
 afterEach(() => closers.splice(0).forEach((c) => c()));
 
-async function setup(questionTimeoutMs = 20) {
+async function setup(questionTimeoutMs = 20, env: Record<string, string> = { AI_PROVIDER: 'mock' }) {
   const tmp = mkdtempSync(path.join(tmpdir(), 'recipe-server-'));
-  const config = parseConfig({ AI_PROVIDER: 'mock', RUNS_DIR: path.join(tmp, 'runs'), BRAND_KIT_DIR: path.join(tmp, 'kit') }, root);
+  const config = parseConfig({ ...env, RUNS_DIR: path.join(tmp, 'runs'), BRAND_KIT_DIR: path.join(tmp, 'kit') }, root);
   const { db, close } = openDb(':memory:');
   closers.push(close);
   const events = new RunEvents();
@@ -31,6 +31,15 @@ describe('server', () => {
     const { app } = await setup();
     const res = await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml: 'brand: {}' } });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('refuses a real run without an OpenAI key before creating it', async () => {
+    const { app, db } = await setup(20, { AI_PROVIDER: 'openai' });
+    const res = await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ error: string }>().error).toMatch(/OPENAI_API_KEY is not set/);
+    expect(db.select().from(runs).all()).toHaveLength(0);
+    expect((await app.inject({ url: '/api/health' })).json()).toMatchObject({ provider: 'openai', openaiKeySet: false });
   });
 
   it('creates a run, processes the queued job end to end and serves posts, files, costs and the zip', async () => {

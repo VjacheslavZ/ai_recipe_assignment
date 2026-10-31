@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { api } from './api.ts';
+import { useEffect, useState, type FormEvent } from 'react';
+import { api, type OpenAiCheck } from './api.ts';
 
 function FilePicker(props: { name: string; label: string; hint: string; multiple?: boolean; files: File[]; onChange: (f: File[]) => void }) {
   return (
@@ -16,6 +16,68 @@ function FilePicker(props: { name: string; label: string; hint: string; multiple
       />
       {props.files.length > 0 && <span className="mt-1 block text-xs text-ink-soft">{props.files.map((f) => f.name).join(', ')}</span>}
     </label>
+  );
+}
+
+/** Free check of the key and model ids before spending money on a real run. */
+function OpenAiSetup() {
+  const [keySet, setKeySet] = useState<boolean | null>(null);
+  const [check, setCheck] = useState<OpenAiCheck | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .health()
+      .then((h) => setKeySet(h.provider === 'openai' ? h.openaiKeySet : null))
+      .catch(() => setKeySet(null));
+  }, []);
+
+  if (keySet === null) return null;
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setCheck(await api.checkOpenAi());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section aria-labelledby="openai-label" className="rounded-md bg-paper px-4 py-3 shadow-[0_1px_0_var(--color-rule)]">
+      <h2 id="openai-label" className="text-sm font-semibold">
+        OpenAI setup
+      </h2>
+      {!keySet ? (
+        <p className="mt-1 text-xs text-pencil">OPENAI_API_KEY is not set. Add it to .env, then run docker compose restart server.</p>
+      ) : (
+        <>
+          <p className="mt-1 text-xs text-ink-soft">Checks the key and the configured models. Free: no tokens are used.</p>
+          <button type="button" disabled={busy} onClick={() => void run()} className="mt-2 text-sm font-medium text-active underline underline-offset-2 disabled:opacity-40">
+            {busy ? 'Checking…' : 'Check OpenAI setup'}
+          </button>
+        </>
+      )}
+      {error && <p className="mt-2 text-xs text-pencil">{error}</p>}
+      {check?.error && <p className="mt-2 text-xs text-pencil">{check.error}</p>}
+      {check && check.models.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs">
+          {check.models.map((m) => (
+            <li key={m.role} className={m.available ? 'text-ink-soft' : 'text-pencil'}>
+              {m.available ? '✓' : '✗'} {m.role}: <span className="font-mono">{m.model}</span>
+              {m.error && ` — ${m.error}`}
+              {m.available && !m.priced && ' — no price entry, cost will show as unknown'}
+              {m.shutdownDate && ` — shuts down ${m.shutdownDate}`}
+            </li>
+          ))}
+        </ul>
+      )}
+      {check?.ok && <p className="mt-2 text-xs font-semibold text-ink">Ready for a real run.</p>}
+    </section>
   );
 }
 
@@ -83,22 +145,25 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
           />
         </section>
 
-        <section aria-labelledby="kit-label" className="space-y-3">
-          <h2 id="kit-label" className="text-sm font-semibold">
-            Brand kit for this run
-          </h2>
-          <p className="text-xs text-ink-soft">Optional. Anything you leave out comes from the repository’s brand_kit folder.</p>
-          <FilePicker name="logo" label="Logo" hint="PNG, transparent background works best" files={logo} onChange={setLogo} />
-          <FilePicker
-            name="products"
-            label="Product photos"
-            hint="File names must match imageFile in the brief"
-            multiple
-            files={products}
-            onChange={setProducts}
-          />
-          <FilePicker name="screenshots" label="Instagram screenshots" hint="6–10 recent posts, used for the style analysis" multiple files={screenshots} onChange={setScreenshots} />
-        </section>
+        <div className="space-y-6">
+          <OpenAiSetup />
+          <section aria-labelledby="kit-label" className="space-y-3">
+            <h2 id="kit-label" className="text-sm font-semibold">
+              Brand kit for this run
+            </h2>
+            <p className="text-xs text-ink-soft">Optional. Anything you leave out comes from the repository’s brand_kit folder.</p>
+            <FilePicker name="logo" label="Logo" hint="PNG, transparent background works best" files={logo} onChange={setLogo} />
+            <FilePicker
+              name="products"
+              label="Product photos"
+              hint="File names must match imageFile in the brief"
+              multiple
+              files={products}
+              onChange={setProducts}
+            />
+            <FilePicker name="screenshots" label="Instagram screenshots" hint="6–10 recent posts, used for the style analysis" multiple files={screenshots} onChange={setScreenshots} />
+          </section>
+        </div>
       </div>
 
       {error && (
