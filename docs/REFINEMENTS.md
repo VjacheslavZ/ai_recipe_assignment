@@ -30,7 +30,7 @@ Date: TODO · Stage/area: 04 Create · Run: TODO · Status: **planned (M3, ~30 m
 - **Setup:** one slide from Post TODO, same concept and product (`brand_kit/gymbeamhr/products/TODO`).
   - **A — compose:** background generated without product → `sharp` composites real product photo + real logo + SVG headline.
   - **B — image edit:** OpenAI image edit/generation with the product photo as reference, product and headline rendered by the model.
-- **Compare on:** label/logo legibility and correctness vs reference photo, product shape/colour fidelity, scene integration (does it look pasted-in?), text correctness (Croatian diacritics), cost per image, latency, QA scores.
+- **Compare on:** label/logo legibility and correctness vs reference photo, product shape/colour fidelity, scene integration (does it look pasted-in?), text correctness, cost per image, latency, QA scores.
 - **What AI produced:** TODO
 - **Problem observed:** TODO
 - **Hypothesis:** image models redraw small label text and logos, so B is expected to be less accurate; A may look less integrated. TODO confirm or refute.

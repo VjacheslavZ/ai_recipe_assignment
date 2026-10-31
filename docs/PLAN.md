@@ -8,7 +8,7 @@ Related docs: [DECISIONS.md](./DECISIONS.md) (ADRs) · [TIMELOG.md](./TIMELOG.md
 
 ## 1. Goal and success criteria
 
-**Goal.** A re-runnable, resumable AI recipe that turns a short brand brief into three finished, on-brand Instagram posts (images + Croatian captions), with saved intermediate artifacts (brief, analysis, plan, prompts, QA review) and cost/time tracking. Delivered as code (pnpm monorepo: CLI + web app) plus a 1–2 page PDF.
+**Goal.** A re-runnable, resumable AI recipe that turns a short brand brief into three finished, on-brand Instagram posts (images + English captions), with saved intermediate artifacts (brief, analysis, plan, prompts, QA review) and cost/time tracking. Delivered as code (pnpm monorepo: web app with API and job worker, run in Docker) plus a 1–2 page PDF.
 
 **Success criteria (checked before submission in M8):**
 
@@ -18,8 +18,8 @@ Related docs: [DECISIONS.md](./DECISIONS.md) (ADRs) · [TIMELOG.md](./TIMELOG.md
 | S2 | Product photos, logo, packaging, labels are pixel-accurate (not AI-redrawn) | Compose pipeline uses real files from `brand_kit/`; QA rubric item "product accuracy" ≥ threshold; manual visual check |
 | S3 | No invented product properties, prices or quotes | Plan/caption prompts restricted to facts in `analysis.json` tagged `verified`; QA rubric item "no invented facts"; manual check against source URLs |
 | S4 | Brand analysis cites specific URLs/examples, separates verified / assumption / unavailable | `analysis.json` schema enforces a `status` + `source` per fact; `analysis.md` rendering |
-| S5 | One command re-runs the process end to end; any stage can be resumed | `pnpm recipe run --brief brief.yaml` and `--from-step N`; tested in M7 |
-| S6 | Recipe has no hidden dependencies: start command, tools, models, settings, human actions documented | README, RECIPE.md, `.env.example`, `brief.example.yaml` |
+| S5 | The process re-runs end to end from the UI; any stage can be resumed | `docker compose up`, "Start run" and "Re-run from here" in the UI; resumability tested in M7 (ADR-027) |
+| S6 | Recipe has no hidden dependencies: start command, tools, models, settings, human actions documented | README, `compose.yaml`, `.env.example`, `brief.example.yaml` |
 | S7 | PDF ≤ 2 pages covering all required sections | Checklist in §13 |
 | S8 | Time log separates active work from waiting | `TIMELOG.md` totals |
 | S9 | Cost per run is reported | `cost_report.json` from `ai_calls` table; UI cost screen |
@@ -29,13 +29,8 @@ Related docs: [DECISIONS.md](./DECISIONS.md) (ADRs) · [TIMELOG.md](./TIMELOG.md
 ## 2. Architecture overview
 
 ```
-                         ┌──────────────────────────────┐
-  brief.yaml ──────────► │ packages/cli                 │  pnpm recipe run --brief brief.yaml [--from-step N]
-  brand_kit/<brand>/ ──► │  (commander, thin wrapper)   │
-                         └──────────────┬───────────────┘
-                                        │ calls
-┌───────────────────────┐    REST/SSE   │
-│ packages/web          │ ◄──────────►  │
+┌───────────────────────┐    REST/SSE
+│ packages/web          │ ◄──────────►  ┐
 │ React + Vite + Tailwind│              ▼
 │ New run · Run view ·  │    ┌──────────────────────────────┐
 │ Gallery · Cost        │    │ packages/server              │
@@ -59,9 +54,9 @@ Related docs: [DECISIONS.md](./DECISIONS.md) (ADRs) · [TIMELOG.md](./TIMELOG.md
                      runs/<run_id>/01_brief … 05_review/  (JSON, MD, PNG, ZIP)
 ```
 
-- **core** has no knowledge of HTTP or DB; it receives a `RunContext` (run dir, config, `onAiCall` / `onProgress` callbacks). CLI and server both drive the same stage functions → identical behaviour from either entry point.
-- **CLI** persists status to `runs/<id>/state.json` when run standalone; **server** persists to SQLite and mirrors the same artifact files.
-- **RECIPE.md** is a third entry point: step-by-step prompts for running the same phases inside Claude Code. The agent runs each phase through the CLI (`--from-step N --to-step N`), checks the artifact against a checklist and stops at human checkpoints, so all three entry points share one implementation (ADR-014).
+- **core** has no knowledge of HTTP or DB; it receives a `RunContext` (run dir, config, `onAiCall` / `onProgress` callbacks). The server's job worker drives the stage functions.
+- **server** persists status to SQLite and writes `runs/<id>/state.json` next to the artifact files.
+- **web** is the only entry point: runs are started, answered, re-run and downloaded in the browser (ADR-027). Both run in Docker (`compose.yaml`: `server` + `web` containers, repo bind-mounted, hot reload).
 
 ### Data flow (one run)
 
@@ -80,13 +75,13 @@ every AI call ─► ai_calls ─► cost_report.json
 
 | # | Stage | Input | What it does | Output | Artifact file(s) |
 |---|---|---|---|---|---|
-| 01 | Brief | `brief.yaml` (CLI) or form (UI); uploaded logo, product images, Instagram screenshots, reference links | Validates with Zod; normalises URLs; copies/registers assets; records which assets exist (logo, N products with names, N screenshots); asks for missing required fields (UI form validation / CLI error with hint) | Normalised brief | `01_brief/brief.json`, `assets` rows |
+| 01 | Brief | Brief YAML pasted in the UI (or the GymBeam example); uploaded logo, product images, Instagram screenshots, reference links | Validates with Zod; normalises URLs; copies/registers assets; records which assets exist (logo, N products with names, N screenshots); asks for missing required fields (validation errors shown in the UI) | Normalised brief | `01_brief/brief.json`, `assets` rows |
 | 02 | Analysis | `brief.json`, screenshots, brand site | (a) Site research via Responses API + `web_search` restricted to the brand domain(s) → product facts with URLs; (b) vision model over Instagram screenshots → tone, themes, visual style, HEX colours, how products/people are shown; (c) merge into one structured analysis. Every fact: `status: verified \| assumption \| unavailable`, `source` (URL or screenshot filename), `evidence` | Brand analysis | `02_analysis/analysis.json`, `analysis.md`, `sources.json` |
-| 03 | Plan | `analysis.json`, `brief.json` | Plans 3 posts: goal (educate / engagement / saves / product intro / purchase intent), format (single / carousel), concept, rationale tied to analysis, slide list with on-image text, product asset per slide, caption draft (HR), hashtags. Only `verified` facts may appear as claims | Content plan | `03_plan/plan.json`, `plan.md` |
+| 03 | Plan | `analysis.json`, `brief.json` | Plans 3 posts: goal (educate / engagement / saves / product intro / purchase intent), format (single / carousel), concept, rationale tied to analysis, slide list with on-image text, product asset per slide, caption (English), hashtags. Only `verified` facts may appear as claims | Content plan | `03_plan/plan.json`, `plan.md` |
 | 04 | Create | `plan.json`, `analysis.json` (colours, style), `brand_kit/` | Per slide: build background prompt (scene without product/logo/text) → image model → `sharp` composite: background + real product cut-out (shadow, scale, placement) + real logo + headline/body text as SVG with brand font → 1080×1350 PNG. Final caption polish. | Finished slides & captions | `04_create/post_<n>/slide_<k>.png`, `captions.json`, `image_prompts.json`, `compose_specs.json` |
 | 05 | Review | slides, `plan.json`, `analysis.json` | Vision QA per slide + per post against rubric: brand fit, readability/contrast, product accuracy (compared with reference photo), goal fit, no invented facts (caption vs verified facts). Score < threshold → regenerate that slide once (new seed / prompt fix from QA feedback) → re-score. Packages final posts. | QA report + final package | `05_review/review.json`, `review.md`, `posts.zip`, `cost_report.json` |
 
-Resumability: each stage reads only files from earlier stage folders; a stage is "done" when its artifact exists and validates against its Zod schema and the DB/state marks it `succeeded`. `--from-step N` deletes/overwrites stage ≥ N artifacts and keeps earlier ones.
+Resumability: each stage reads only files from earlier stage folders; a stage is "done" when its artifact exists and validates against its Zod schema and the DB/state marks it `succeeded`. "Re-run from here" (`fromStage`) deletes/overwrites stage ≥ N artifacts and keeps earlier ones.
 
 ---
 
@@ -132,7 +127,7 @@ Resumability: each stage reads only files from earlier stage folders; a stage is
 
 ## 7. Milestones
 
-Estimates are the **author's active time**; waiting time (Claude Code writing code, image generation) is logged separately in [TIMELOG.md](./TIMELOG.md). Order is deliberate: CLI + post quality first (M1–M4) so a complete submission exists even if UI time runs out.
+Estimates are the **author's active time**; waiting time (Claude Code writing code, image generation) is logged separately in [TIMELOG.md](./TIMELOG.md). Order is deliberate: pipeline + post quality first (M1–M4, driven by a CLI at the time) so a complete submission exists even if UI time runs out.
 
 ### M0 — Monorepo skeleton, config, docs · est. 15 min · **DONE (2026-10-30)**
 
@@ -215,8 +210,9 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 - [x] Vitest: schema validation, cost calculation, compose dimensions/overflow, resumability (`--from-step` keeps earlier artifacts), job queue lock/requeue; AI calls mocked (84 tests)
 - [x] README: prerequisites, setup, `.env`, start commands (CLI, server+web), human actions, what varies, cost & time, troubleshooting
 - [x] RECIPE.md: Claude Code entry point — phases with prompts, inputs/outputs, same artifact layout; CLI `--answer` for price questions in non-interactive shells
+- [x] 2026-10-31 (ADR-027): CLI and RECIPE.md removed — the web UI is the only entry point; Docker-only dev setup with hot reload; README rewritten for it; all post copy in English
 
-**Done when:** `pnpm test` green; a fresh clone + README steps reach a finished run.
+**Done when:** `docker compose exec server pnpm test` green; a fresh clone + README steps reach a finished run.
 
 ### M8 — Final run, selection, PDF · est. 45 min
 
@@ -244,7 +240,7 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | R5 | Ask audience | Form field + `brief.audience` |
 | R6 | Ask goals | Form field + `brief.goals[]` |
 | R7 | Ask references / inspiration | Form field + `brief.references[]` (links) |
-| R8 | Allow links or uploads of product images, logos, other references | UI uploads + `POST /api/assets`; CLI `brand_kit/<brand>/` paths in brief; `assets` table |
+| R8 | Allow links or uploads of product images, logos, other references | UI uploads + `POST /api/assets`; `brand_kit/<brand>/` paths in the brief as fallback; `assets` table |
 | R9 | Prepare and attach own brief answers and inputs for the demo | `brief.example.yaml`, `brand_kit/gymbeamhr/` (+ `SOURCES.md`), copied into `runs/<final>/01_brief/` |
 | R10 | Study Instagram posts: tone, audience, themes, style, colours, product & people presentation | Stage 02 vision analysis of screenshots → `analysis.json` fields `tone`, `audience`, `content_pillars`, `visual_style`, `colors_hex`, `product_presentation`, `people_presentation` |
 | R11 | Use official site / shop / catalogue for facts | Stage 02 `web_search` scoped to gymbeam.hr; `sources.json` |
@@ -264,19 +260,19 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | R25 | Posts are demo only, no publishing | No Instagram API integration; stated in README |
 | R26 | Use real, available AI tools/models | OpenAI Responses API, `web_search`, vision, image model; model IDs in `.env.example` |
 | R27 | Code on GitHub / ZIP; if web app, include code | Repo (or ZIP) with all packages |
-| R28 | Must be possible to run the process (not just a results page) | CLI + server + web; RECIPE.md |
+| R28 | Must be possible to run the process (not just a results page) | Web UI + API + job worker, started with `docker compose up` (ADR-027) |
 | R29 | Clear phases: brief/inputs, analysis, planning, creation, review/delivery | Stages 01–05 (§3) |
-| R30 | Per phase: inputs, what it does, output passed on | §3 table; README; RECIPE.md; PDF phase overview |
+| R30 | Per phase: inputs, what it does, output passed on | §3 table; README; stage tabs in the UI; PDF phase overview |
 | R31 | Include key intermediate results: analysis, plan, generation prompts | `analysis.json/.md`, `plan.json/.md`, `image_prompts.json`, `compose_specs.json`, `review.json` in `runs/<final>/` |
-| R32 | Resume from a saved phase after interruption | Artifact-per-stage + `steps` status; `--from-step N`; server requeues stale jobs; UI "Rerun from this stage" |
+| R32 | Resume from a saved phase after interruption | Artifact-per-stage + `steps` status; server requeues stale jobs; UI "Rerun from this stage" |
 | R33 | Deliver 3 posts: media + texts with format, goal, short rationale | `posts.zip` incl. `POSTS.md` (format/goal/rationale per post) |
 | R34 | State Instagram profile, sources, input references needed to repeat | `brief.example.yaml`, `brand_kit/gymbeamhr/SOURCES.md`, `sources.json`, PDF |
-| R35 | Recipe actually used: prompts or code (+ app link if any) | Repo; prompts in `packages/core/src/prompts/`; RECIPE.md |
-| R36 | Start prompt/command | README + PDF: `pnpm recipe run --brief brief.example.yaml`; `pnpm dev` for UI |
+| R35 | Recipe actually used: prompts or code (+ app link if any) | Repo; prompts in `packages/core/src/prompts/`; README run guide |
+| R36 | Start prompt/command | README + PDF: `docker compose up`, then "Load the GymBeam example" → "Start run" |
 | R37 | Tools and models | README "Tools & models"; `.env.example`; `runs/<id>/config.json` snapshot |
 | R38 | Settings | `.env.example`, `config_json` per run (size, quality, threshold, seed) |
 | R39 | All required manual actions | README "Human actions" (API key, Instagram screenshots, approve final selection) |
-| R40 | No dependency on unshared chats or unexplained manual edits | All prompts in repo; RECIPE.md self-contained; any manual edit logged in REFINEMENTS |
+| R40 | No dependency on unshared chats or unexplained manual edits | All prompts in repo; README run guide self-contained; any manual edit logged in REFINEMENTS |
 | R41 | PDF 1–2 pages: setup & run | PDF §1 |
 | R42 | PDF: phase overview | PDF §2 |
 | R43 | PDF: key decisions | PDF §3 (from DECISIONS.md) |
@@ -291,7 +287,7 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | R52 | Improvement proposal | PDF §9 |
 | R53 | Learning from comments, approvals, past post performance: data used, what changes, how to verify new version is better | PDF §9: data = approval/rejection + edit diffs in UI, Instagram Insights (saves, shares, comments, reach) per post, comment sentiment; changes = few-shot examples of approved posts in plan prompt, rubric weights, preferred templates, LoRA on brand packaging/style; verification = offline eval set of briefs scored by QA rubric + human blind A/B, online A/B of post variants on engagement rate |
 | R54 | Deadline: 7 days from invitation | §12 timeline; TIMELOG dates |
-| R55 | Submission language English or Croatian | Docs/PDF in English; captions in Croatian (brand market) — ADR-013 |
+| R55 | Submission language English or Croatian | Docs, PDF and post copy in English — ADR-027 (supersedes ADR-013) |
 | R56 | Send to the email in the brief | §13 checklist (velimir@filmconnect.com) |
 | R57 | Separate active time from generation waiting | TIMELOG.md columns Active / Waiting |
 
@@ -302,12 +298,12 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | Vacancy point | Feature in this project |
 |---|---|
 | Products connecting AI agents, brand analysis, image generation | Whole pipeline: web_search research agent → vision brand analysis → plan → image generation + compose |
-| Turning a process run on real brands into a standalone app | Same core used by CLI, web app and Claude Code recipe; parameterised by brand (`brand_kit/<slug>`) |
+| Turning a process run on real brands into a standalone app | One core pipeline behind the web app and API; parameterised by brand (`brand_kit/<slug>`) |
 | Backend + web app, architecture | Fastify + SQLite/Drizzle + React/Vite monorepo; ADRs in DECISIONS.md |
 | Connect AI models and agentic processes into a reliable product | Retries, timeouts, schema-validated outputs, resumable stages, job queue with requeue on restart |
 | Generation, analysis and quality checking of images | Stage 04 generation/compose, stage 05 vision QA rubric + regeneration |
 | Reliability, speed, cost | `ai_calls` cost/latency tracking, cost report per run, caching via resume, configurable model tiers |
-| Claude Code / Cursor + ability to review AI code | Code written with Claude Code, reviewed by author; REFINEMENTS documents corrections; RECIPE.md as Claude Code entry point |
+| Claude Code / Cursor + ability to review AI code | Code written with Claude Code, reviewed by author; REFINEMENTS documents corrections |
 | LLM API, agents, tool calling, structured outputs | Responses API, `web_search` tool, Zod structured outputs |
 | Automated testing and evaluation of results | Vitest suite; QA rubric scores as automatic eval; proposed offline eval set (PDF §9) |
 | TS / Node / React / Python | TS/Node/React (Python not needed) |
@@ -334,8 +330,8 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | Non-determinism between runs | Rerun differs | Fixed brand kit, structured outputs, low temperature for analysis/plan, saved prompts; documented "what varies" (wording, backgrounds, concepts) vs "what is fixed" (products, logo, colours, fact set) |
 | API errors / timeouts / rate limits | Broken runs | Exponential backoff, per-call timeout, step-level retry, resumability |
 | Font licensing / missing brand font | Off-brand typography | Use official font if openly licensed, else closest Google Font; note in SOURCES.md |
-| Croatian caption quality | Unnatural language | Generate natively in HR with analysis tone examples; author reviews; English gloss in `POSTS.md` |
-| Time overrun | Incomplete submission | CLI + posts first (M1–M4); UI later; scope cuts in §11; complete submission possible after M4 + M8 |
+| Caption quality | Generic or off-brand copy | Tone examples from the analysis in the plan prompt; caption fact check in stage 05; author reviews |
+| Time overrun | Incomplete submission | Pipeline + posts first (M1–M4); UI later; scope cuts in §11; complete submission possible after M4 + M8 |
 
 ---
 
@@ -368,8 +364,8 @@ Invitation received → deadline 7 days later (exact date to be filled in from t
 - [ ] Post 1, Post 2, Post 3 — PNGs (all carousel slides in order), caption (HR + EN gloss), format, goal, rationale (`posts.zip` with `POSTS.md`)
 - [ ] Sources and input references: `brief.example.yaml`, `brand_kit/gymbeamhr/` + `SOURCES.md`, `sources.json`
 - [ ] Intermediate results of the final run: `analysis.json/.md`, `plan.json/.md`, `image_prompts.json`, `review.json`, `cost_report.json`
-- [ ] Recipe: GitHub link (or ZIP) with code + prompts; RECIPE.md; app run instructions
+- [ ] Recipe: GitHub link (or ZIP) with code + prompts; app run instructions (Docker)
 - [ ] Start command, tools, models, settings, human actions — in README and PDF
 - [ ] `.env.example` without keys; secrets scan done (`grep -r "sk-"` clean)
 - [ ] PDF (1–2 pages): setup/run · phases · key decisions · result checks · limitations · time (active vs waiting) · one AI refinement example · what varies between runs · improvement proposal incl. learning from comments/approvals/performance (data, changes, verification) · statement that code was written with Claude Code and reviewed by the author
-- [ ] Sent within 7 days of invitation; language English (captions Croatian)
+- [ ] Sent within 7 days of invitation; language English (docs and posts)

@@ -15,7 +15,7 @@ Statuses: Proposed · Accepted · Superseded. New decisions are appended; supers
 Date: 2026-10-30 · Status: Accepted
 
 - **Context:** Need a CLI, a backend and a web app sharing the same pipeline logic; vacancy stack is TS/Node/React.
-- **Decision:** Node 22 + TypeScript, pnpm workspaces: `packages/core` (stages, schemas, OpenAI wrapper, compose), `packages/server` (Fastify + SQLite), `packages/web` (React + Vite + Tailwind), `packages/cli`. Vitest for tests.
+- **Decision:** Node 22 + TypeScript, pnpm workspaces: `packages/core` (stages, schemas, OpenAI wrapper, compose), `packages/server` (Fastify + SQLite), `packages/web` (React + Vite + Tailwind), `packages/cli` (removed by ADR-027). Vitest for tests.
 - **Alternatives:** Python (FastAPI + Pillow) — good image tooling but splits the stack from the React UI; single package — CLI and server would drift.
 - **Consequences:** One language end to end; core is entry-point agnostic (`RunContext` with callbacks). `sharp` covers image compositing needs.
 
@@ -71,7 +71,7 @@ Date: 2026-10-30 · Status: Accepted
 Date: 2026-10-30 · Status: Accepted
 
 - **Context:** Assignment asks for intermediate results and ideally resuming from a saved phase; expensive AI calls should not be repeated.
-- **Decision:** Each stage writes to `runs/<run_id>/NN_stage/` (JSON + human-readable MD + PNG) and records status (`state.json` for CLI, `steps` table for server). A stage reads only earlier artifacts. `--from-step N` / "Rerun from this stage" recomputes N…5.
+- **Decision:** Each stage writes to `runs/<run_id>/NN_stage/` (JSON + human-readable MD + PNG) and records status (`state.json` in the run folder, `steps` table in SQLite). A stage reads only earlier artifacts. "Re-run from here" recomputes N…5.
 - **Alternatives:** DB-only storage; single monolithic run.
 - **Consequences:** Artifacts are inspectable and shippable with the submission; enables hand-edit-then-resume (logged in REFINEMENTS.md).
 
@@ -108,7 +108,7 @@ Date: 2026-10-30 · Status: Accepted
 - **Consequences:** Clear research next step with evaluation plan.
 
 ## ADR-013 — Croatian captions, English documentation
-Date: 2026-10-30 · Status: Accepted
+Date: 2026-10-30 · Status: Superseded by ADR-027 (all content in English)
 
 - **Context:** @gymbeamhr posts in Croatian; submission language must be English or Croatian.
 - **Decision:** Captions and on-image text in Croatian (brand market); all docs, PDF, prompts and code in English. `POSTS.md` adds English glosses for reviewers.
@@ -116,7 +116,7 @@ Date: 2026-10-30 · Status: Accepted
 - **Consequences:** Author reviews Croatian copy; language is a brief parameter (`caption_language`).
 
 ## ADR-014 — Claude Code as development tool and alternative recipe entry point
-Date: 2026-10-30 · Status: Accepted
+Date: 2026-10-30 · Status: Partly superseded by ADR-027 (RECIPE.md and the CLI removed; Claude Code stays the development tool)
 
 - **Context:** Vacancy values AI-assisted development with the ability to review AI code; the assignment accepts prompt-only recipes for agentic environments.
 - **Decision:** Code is written with Claude Code and reviewed/edited by the author (stated openly in the PDF; TIMELOG separates author active time from Claude Code working time). `RECIPE.md` lets the same phases run inside Claude Code: the agent runs each phase through the CLI, checks its artifact against a checklist and stops at human checkpoints (price answers, post approval). It does not re-implement phases in prompts, so there is one implementation to keep correct. Because an agent's shell is not interactive, the CLI prints unanswered price questions with their ids and accepts answers with `--answer <id>=<value>` (updated 2026-10-30, M7).
@@ -199,15 +199,39 @@ Date: 2026-10-30 · Status: Accepted
 Date: 2026-10-30 · Status: Accepted
 
 - **Context:** The UI has to start runs, show progress, take answers to price questions and present the posts for approval. It is an internal tool for one marketer, so it should stay small and show the posts the way the audience will see them.
-- **Decision:** One React page with hash routes (`#/`, `#/runs/:id`), no router or state library. A run subscribes to the SSE stream; a reducer applies events, and a `revision` counter bumps when a stage finishes so tabs refetch their artifacts. Stage outputs are shown by rendering the markdown files the pipeline already writes (`analysis.md`, `plan.md`, `review.md`), so CLI and UI read the same artifacts. Posts are shown in phone frames with a scroll-snap carousel, QA score per slide, Croatian/English caption and fact-check result. The visual style is a neutral grey desk with paper panels, so any brand palette reads true; red is used only for things a human must check (questions, failed QA, "check before publishing").
+- **Decision:** One React page with hash routes (`#/`, `#/runs/:id`), no router or state library. A run subscribes to the SSE stream; a reducer applies events, and a `revision` counter bumps when a stage finishes so tabs refetch their artifacts. Stage outputs are shown by rendering the markdown files the pipeline already writes (`analysis.md`, `plan.md`, `review.md`), so the UI and the downloaded files show the same text. Posts are shown in phone frames with a scroll-snap carousel, QA score per slide, caption and fact-check result. The visual style is a neutral grey desk with paper panels, so any brand palette reads true; red is used only for things a human must check (questions, failed QA, "check before publishing").
 - **Alternatives:** React Router + TanStack Query; dedicated React views for each JSON artifact; polling instead of SSE.
-- **Consequences:** Few dependencies (`marked` only) and one source of truth for stage output. Markdown is rendered as HTML without sanitising because it comes from the app's own pipeline; if users could edit artifacts, it would need sanitising. Log lines are live only, not stored.
+- **Consequences:** Few dependencies (`marked` only) and one source of truth for stage output. A run blocked on a question must be impossible to miss (updated 2026-10-31): a red "waiting for your answer" block above the stage strip with a countdown to the automatic skip (questions carry `expiresAt`), the stage shown as "Waiting for your answer", "Needs your answer" in the runs list (`pendingQuestions` in `GET /api/runs`) and in the tab title. The live stream recovers from server restarts: the server ends SSE streams in a `preClose` hook and sends a named `ping` every 15 s; the page reconnects after an HTTP error or 40 s of silence (a dev proxy can keep a dead stream open). Markdown is rendered as HTML without sanitising because it comes from the app's own pipeline; if users could edit artifacts, it would need sanitising. Log lines are live only, not stored.
 
 ## ADR-025 — Docker: one container for API, worker and built UI
-Date: 2026-10-30 · Status: Accepted
+Date: 2026-10-30 · Status: Superseded by ADR-027 (Docker dev setup with hot reload)
 
 - **Context:** A reviewer should be able to run the app without installing Node, pnpm and native modules.
 - **Decision:** One image (`node:22-bookworm-slim`) installs dependencies with the pinned pnpm, builds the web UI and runs the server from TypeScript sources with tsx, as `pnpm dev:server` does. When `packages/web/dist` exists, the API server also serves the UI with an app-shell fallback, so there is one process and one port (3001). New settings: `HOST` (default `127.0.0.1`, `0.0.0.0` in the image) and `WEB_DIST_DIR`. `compose.yaml` mounts `data/`, `runs/`, and `brand_kit/` + `brief.example.yaml` read-only, reads `.env` if present, and uses its own database file because run paths stored in SQLite differ inside the container. The image installs fontconfig and DejaVu fonts, because Pango needs a font for slide text. Found while testing: `fs.cpSync` into a Docker Desktop bind mount fails with EACCES, so the per-run brand kit is copied file by file.
 - **Alternatives:** Separate nginx container for the UI; compiled `dist/` server; Node 22.12 base image (the pinned pnpm 11 requires 22.13+).
 - **Consequences:** `docker compose up --build` is the shortest way to try the app. The image keeps dev dependencies (tsx, Vite) for simplicity, so it is larger than a production image would be.
+
+## ADR-026 — Local models through Ollama for free test runs; caption language as a setting
+Date: 2026-10-31 · Status: Withdrawn by ADR-028 (Ollama provider removed); the language setting is superseded by ADR-027
+
+- **Context:** Mock fixtures prove the pipeline wiring but never exercise the prompts and schemas against a real model. OpenAI runs cost money and need the key, which is added last.
+- **Decision:** `AI_PROVIDER=ollama` points the same OpenAI SDK code at Ollama's OpenAI-compatible Responses API (checked: structured output with a JSON schema works on Ollama 0.40). Text calls use `OLLAMA_TEXT_MODEL` (default `qwen3:14b`), vision calls `OLLAMA_VISION_MODEL` (default `qwen2.5vl:7b`); thinking is turned off, timeouts are longer, cost is recorded as $0. Calls that need hosted web search, and image generation, go to the mock: Ollama has neither (its search is a cloud service with an account), and a local model asked to research the site without search would invent facts and mark them verified. The review lists such runs as not publishable. The post language became a setting: `market.captionLanguage` in the brief (`hr` or `en`) with an env override `CONTENT_LANGUAGE`. Local test runs use English because small models write poor Croatian. Plan fields lost their `Hr` suffix (`headline`, `subtext`, `caption`; `*En` stays the English gloss).
+- **Alternatives:** A separate Ollama client on the native `/api/chat`; a local web fetcher for site research; generating backgrounds with a local diffusion model.
+- **Consequences:** Free, realistic runs for prompt and schema work. Quality of local output says nothing about the final run. Runs created before the field rename cannot be re-run from step 4 or 5.
+
+## ADR-027 — The web UI is the only way to run the recipe; Docker-only development; English content
+Date: 2026-10-31 · Status: Accepted (decided by the author)
+
+- **Context:** Three entry points (CLI, Claude Code via RECIPE.md, web UI) meant three sets of instructions and behaviour to keep in sync, and the CLI needed workarounds for non-interactive shells (`--answer`). Running on the host needed Node 22.13+, pnpm and native modules. Captions in Croatian could not be reviewed by the reviewer or the author with confidence, and small local models write poor Croatian.
+- **Decision:** Runs are started, answered, re-run and downloaded only in the web UI; `packages/cli` and `RECIPE.md` are removed. The app is started and developed only through `docker compose up`: two containers from one dev image, `server` (`tsx watch`, file polling because inotify events from Docker Desktop bind mounts missed editor saves) and `web` (Vite with HMR, proxying `/api` to `server`). The repo is bind-mounted, `node_modules` live in named volumes. The API server no longer serves a built UI (`WEB_DIST_DIR` removed). All post copy (on-image text and captions) is in English: the language setting (`market.captionLanguage`, `CONTENT_LANGUAGE`) and the `*En` gloss fields are removed; the rule is one of the default brief constraints and part of the plan prompt (`plan@3`, `review@3`).
+- **Alternatives:** Keep the CLI for scripted runs; a production image with a built UI next to the dev setup; Croatian captions with an English gloss.
+- **Consequences:** One documented way to run and one way to develop; the reviewer needs only Docker. Resuming a run is the UI's "Re-run from here". Posts are in English for a Croatian brand account, which is stated as a limitation; adding a language back is a prompt rule plus a brief field. Runs made before this change (Croatian fields, host paths in the old database `data/recipe.pre-docker.db`) cannot be re-run.
+
+## ADR-028 — No local-model testing; test with the OpenAI API on the cheapest models
+Date: 2026-10-31 · Status: Accepted (decided by the author)
+
+- **Context:** The Ollama provider (ADR-026) ran only part of the pipeline for real: site research and image generation stayed mock, because Ollama has no hosted web search without an ollama.com account and no image endpoint. Small local models were weak judges (QA let unsupported slide text through), so local runs said little about the final run while adding a provider, settings and a code path to maintain.
+- **Decision:** The Ollama provider, its settings and the `host.docker.internal` mapping are removed; providers are `openai` and `mock`. Test runs use the OpenAI API with the cheapest defaults (`gpt-6-luna`, `gpt-image-1-mini`, low quality, 1024×1024). To avoid paid surprises: `POST /api/runs` refuses a real run without a key before creating it, and `GET /api/openai/check` ("Check OpenAI setup" in the UI) retrieves each configured model (`GET /v1/models/{id}`, free) and reports a rejected key, unknown models, models without a price entry and announced shutdown dates.
+- **Alternatives:** Keep Ollama for prompt work; a local diffusion server (LocalAI, stable-diffusion.cpp) for backgrounds; a paid "smoke" call per model in the check.
+- **Consequences:** Every realistic test costs money (a few cents per run on the defaults) and needs the key. The check does not prove a model accepts every parameter (e.g. the `web_search` tool); stage 2 reports that on the first run.
 
