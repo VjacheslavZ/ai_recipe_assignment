@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.git
+.env
+.env.*
+!.env.example
+data
+runs
+brand_kit
+.playwright-mcp
+coverage
+docs
+*.pdf
+AI_Recipe_Assignment.md

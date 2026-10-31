@@ -18,6 +18,7 @@ for design decisions and [RECIPE.md](RECIPE.md) for running the recipe from Clau
 - Node.js 22 (see `.nvmrc`; tested on 22.12)
 - pnpm 11 (`corepack enable` or install pnpm globally)
 - An OpenAI API key (only for stages that call OpenAI)
+- Or only Docker (see [Docker](#docker))
 
 ## Setup
 
@@ -41,6 +42,7 @@ their install scripts via `allowBuilds` in `pnpm-workspace.yaml`.
 | `pnpm typecheck` | Type-check all packages |
 | `pnpm test` | Run tests (Vitest) |
 | `pnpm build` | Build all packages to `dist/` |
+| `docker compose up --build` | API + worker + web UI in one container on http://localhost:3001 |
 
 ## Repository structure
 
@@ -59,7 +61,7 @@ docs/       plan, decision log, refinements
 
 ## How to run the recipe
 
-There are three entry points. All of them run the same stage code in `packages/core` and write the same files to `runs/<runId>/`.
+There are three entry points, plus a Docker setup for the web UI. All of them run the same stage code in `packages/core` and write the same files to `runs/<runId>/`.
 
 ### 1. CLI
 
@@ -87,6 +89,17 @@ pnpm dev:web      # terminal 2, open http://localhost:5173
 ```
 
 On **Start a run**, load the GymBeam example or paste your own brief, optionally upload a logo, product photos and Instagram screenshots for this run only, and start. The run page shows the five stages live, asks price questions in a red card (10 minutes, then the price is left out), and lets you re-run from any stage. The **Posts** tab shows the three posts in phone frames with QA scores per slide, the caption in Croatian and English, and the fact-check result; **Download posts.zip** appears after the review. Runs are listed from SQLite (`data/recipe.db`); their files are in `runs/`.
+
+### Docker
+
+One container runs the API, the job worker and the built web UI:
+
+```bash
+cp .env.example .env      # set OPENAI_API_KEY, or AI_PROVIDER=mock to try it without a key
+docker compose up --build # then open http://localhost:3001
+```
+
+`compose.yaml` mounts `data/` (database `recipe.docker.db`, separate from the local one because the database stores absolute run paths), `runs/` (run folders appear on the host), and `brand_kit/` plus `brief.example.yaml` read-only, so you can change them without rebuilding. The image installs DejaVu fonts for slide text. Stop it with `docker compose down`. The CLI also works inside the container: `docker compose exec recipe pnpm recipe run --brief brief.example.yaml`.
 
 ### 3. Claude Code
 

@@ -203,3 +203,11 @@ Date: 2026-10-30 · Status: Accepted
 - **Alternatives:** React Router + TanStack Query; dedicated React views for each JSON artifact; polling instead of SSE.
 - **Consequences:** Few dependencies (`marked` only) and one source of truth for stage output. Markdown is rendered as HTML without sanitising because it comes from the app's own pipeline; if users could edit artifacts, it would need sanitising. Log lines are live only, not stored.
 
+## ADR-025 — Docker: one container for API, worker and built UI
+Date: 2026-10-30 · Status: Accepted
+
+- **Context:** A reviewer should be able to run the app without installing Node, pnpm and native modules.
+- **Decision:** One image (`node:22-bookworm-slim`) installs dependencies with the pinned pnpm, builds the web UI and runs the server from TypeScript sources with tsx, as `pnpm dev:server` does. When `packages/web/dist` exists, the API server also serves the UI with an app-shell fallback, so there is one process and one port (3001). New settings: `HOST` (default `127.0.0.1`, `0.0.0.0` in the image) and `WEB_DIST_DIR`. `compose.yaml` mounts `data/`, `runs/`, and `brand_kit/` + `brief.example.yaml` read-only, reads `.env` if present, and uses its own database file because run paths stored in SQLite differ inside the container. The image installs fontconfig and DejaVu fonts, because Pango needs a font for slide text. Found while testing: `fs.cpSync` into a Docker Desktop bind mount fails with EACCES, so the per-run brand kit is copied file by file.
+- **Alternatives:** Separate nginx container for the UI; compiled `dist/` server; Node 22.12 base image (the pinned pnpm 11 requires 22.13+).
+- **Consequences:** `docker compose up --build` is the shortest way to try the app. The image keeps dev dependencies (tsx, Vite) for simplicity, so it is larger than a production image would be.
+
