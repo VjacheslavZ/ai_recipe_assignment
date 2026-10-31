@@ -41,6 +41,12 @@ export function App() {
       .catch(() => setApiDown(true));
   }, []);
 
+  // Show in the browser tab that a run is blocked on a person.
+  const waitingRuns = runs.filter((r) => (r.pendingQuestions ?? 0) > 0).length;
+  useEffect(() => {
+    document.title = waitingRuns ? `(${waitingRuns}) Answer needed | Post Recipe` : 'Post Recipe';
+  }, [waitingRuns]);
+
   useEffect(() => {
     const onHash = () => setRoute(parseHash());
     window.addEventListener('hashchange', onHash);
@@ -80,11 +86,15 @@ export function App() {
           <ul className="space-y-0.5">
             {runs.map((r) => {
               const active = route.name === 'run' && route.id === r.id;
-              const mark = STATUS_MARK[r.status];
+              const waiting = (r.pendingQuestions ?? 0) > 0;
+              const mark = waiting ? { label: 'Needs your answer', className: 'font-semibold text-pencil' } : STATUS_MARK[r.status];
               return (
                 <li key={r.id}>
                   <a href={`#/runs/${r.id}`} className={`block rounded-md px-3 py-2 ${active ? 'bg-paper shadow-[0_1px_0_var(--color-rule)]' : 'hover:bg-desk'}`}>
-                    <span className="block text-sm font-medium">{r.brandSlug}</span>
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      {waiting && <span className="size-2 rounded-full bg-pencil" aria-hidden />}
+                      {r.brandSlug}
+                    </span>
                     <span className="flex justify-between text-xs text-ink-soft">
                       <span>{formatTime(r.createdAt)}</span>
                       <span className={mark.className}>{mark.label}</span>

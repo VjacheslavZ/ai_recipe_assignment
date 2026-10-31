@@ -22,6 +22,8 @@ export interface RunRow {
   totalCostUsd: number | null;
   createdAt: string;
   finishedAt: string | null;
+  /** Questions the run is waiting on right now (price confirmations). */
+  pendingQuestions?: number;
 }
 
 export interface StageState {
@@ -36,6 +38,8 @@ export interface Question {
   question: string;
   context?: string;
   suggestedAnswer?: string;
+  /** After this moment the stage continues without an answer. */
+  expiresAt: string;
 }
 
 export interface RunDetail extends RunRow {

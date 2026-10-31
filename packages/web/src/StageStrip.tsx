@@ -7,6 +7,8 @@ const TONE: Record<StageState['status'], { bar: string; text: string; label: str
   failed: { bar: 'bg-pencil', text: 'text-pencil', label: 'Failed' },
 };
 
+const WAITING = { bar: 'bg-pencil animate-pulse', text: 'font-semibold text-pencil', label: 'Waiting for your answer' };
+
 function duration(s: StageState): string | null {
   if (!s.startedAt || !s.finishedAt) return null;
   const sec = Math.round((Date.parse(s.finishedAt) - Date.parse(s.startedAt)) / 1000);
@@ -14,12 +16,18 @@ function duration(s: StageState): string | null {
 }
 
 /** The five recipe stages in order; each finished stage can be re-run from that point on. */
-export function StageStrip(props: { stages: Record<Stage, StageState>; active: boolean; onRerun: (fromStep: number) => void }) {
+export function StageStrip(props: {
+  stages: Record<Stage, StageState>;
+  active: boolean;
+  /** A running stage is blocked on a question to the user. */
+  waiting: boolean;
+  onRerun: (fromStep: number) => void;
+}) {
   return (
     <ol className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-md bg-rule sm:grid-cols-5">
       {STAGES.map((stage, i) => {
         const s = props.stages[stage];
-        const tone = TONE[s.status];
+        const tone = props.waiting && s.status === 'running' ? WAITING : TONE[s.status];
         const took = duration(s);
         const canRerun = !props.active && (s.status !== 'pending' || i === 0 || props.stages[STAGES[i - 1]!].status === 'done');
         return (

@@ -87,6 +87,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: deps.logger ?? false });
   await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 30 } });
 
+  // Open SSE streams. They are ended on shutdown: otherwise close() waits for them, and a dev
+  // proxy keeps the browser side open, so the page would never notice the restart and reconnect.
+  const streams = new Set<FastifyReply['raw']>();
+  app.addHook('preClose', async () => {
+    for (const raw of streams) raw.end();
+  });
+
   const findRun = (id: string) => db.select().from(runs).where(eq(runs.id, id)).get();
   const openStore = (id: string) => RunStore.open(config.RUNS_DIR, id);
 
@@ -152,7 +159,15 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.code(201).send({ runId: store.runId });
   });
 
-  app.get('/api/runs', async () => db.select().from(runs).orderBy(desc(runs.createdAt)).all());
+  app.get('/api/runs', async () => {
+    const open = questions.counts();
+    return db
+      .select()
+      .from(runs)
+      .orderBy(desc(runs.createdAt))
+      .all()
+      .map((r) => ({ ...r, pendingQuestions: open.get(r.id) ?? 0 }));
+  });
 
   app.get<{ Params: { id: string } }>('/api/runs/:id', async (req, reply) => {
     const run = findRun(req.params.id);
@@ -168,10 +183,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const send = (event: RunEvent | { type: 'snapshot'; [k: string]: unknown }) => reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     send({ type: 'snapshot', status: run.status, error: run.error, state: openStore(run.id).getState(), questions: questions.list(run.id) });
     const unsubscribe = events.subscribe(run.id, send);
-    const heartbeat = setInterval(() => reply.raw.write(': ping\n\n'), 15_000);
+    // A named event (not an SSE comment) so the page can tell a silent, dead connection from a quiet run.
+    const heartbeat = setInterval(() => reply.raw.write('event: ping\ndata: {}\n\n'), 15_000);
+    streams.add(reply.raw);
     req.raw.on('close', () => {
       clearInterval(heartbeat);
       unsubscribe();
+      streams.delete(reply.raw);
     });
   });
 

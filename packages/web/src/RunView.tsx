@@ -79,7 +79,21 @@ export function RunView({ runId, onChanged }: { runId: string; onChanged: () => 
         </div>
       </header>
 
-      <StageStrip stages={stages} active={active} onRerun={rerun} />
+      {live.questions.length > 0 && (
+        <section aria-labelledby="waiting-title" className="mt-6 rounded-lg border-2 border-pencil bg-pencil/5 p-4 md:p-5">
+          <h2 id="waiting-title" className="font-wide text-lg font-bold text-pencil">
+            {live.questions.length === 1 ? 'The run is waiting for your answer' : `The run is waiting for ${live.questions.length} answers`}
+          </h2>
+          <p className="mt-1 text-sm text-ink-soft">Nothing else happens until you answer or the time runs out.</p>
+          <div className="mt-4 space-y-3">
+            {live.questions.map((q, i) => (
+              <QuestionCard key={q.id} runId={runId} question={q} autoFocus={i === 0} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <StageStrip stages={stages} active={active} waiting={live.questions.length > 0} onRerun={rerun} />
 
       {error && (
         <p role="alert" className="mt-4 whitespace-pre-wrap rounded-md border-l-4 border-pencil bg-paper px-4 py-3 text-sm text-pencil">
@@ -87,10 +101,6 @@ export function RunView({ runId, onChanged }: { runId: string; onChanged: () => 
         </p>
       )}
       {rerunError && <p className="mt-3 text-sm text-pencil">{rerunError}</p>}
-
-      {live.questions.map((q) => (
-        <QuestionCard key={q.id} runId={runId} question={q} />
-      ))}
 
       <div role="tablist" aria-label="Run output" className="mt-8 flex gap-1 overflow-x-auto border-b border-rule">
         {TABS.map((t) => {

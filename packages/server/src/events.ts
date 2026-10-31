@@ -1,11 +1,14 @@
 import { EventEmitter } from 'node:events';
 import type { AiCallRecord, PendingQuestion, Stage, StageStatus } from '@recipe/core';
 
+/** A question as the UI sees it: when it expires, the stage continues without an answer. */
+export type AskedQuestion = PendingQuestion & { expiresAt: string };
+
 export type RunEvent =
   | { type: 'log'; message: string }
   | { type: 'stage'; stage: Stage; status: StageStatus; error?: string }
   | { type: 'ai_call'; call: AiCallRecord }
-  | { type: 'question'; question: PendingQuestion }
+  | { type: 'question'; question: AskedQuestion }
   | { type: 'question_answered'; id: string }
   | { type: 'run'; status: 'queued' | 'running' | 'succeeded' | 'failed'; error?: string };
 
@@ -28,7 +31,7 @@ export class RunEvents {
  * awaits an answer posted through the API; after `timeoutMs` it gets null (= omitted).
  */
 export class PendingQuestions {
-  private readonly pending = new Map<string, { runId: string; question: PendingQuestion; resolve: (a: string | null) => void }>();
+  private readonly pending = new Map<string, { runId: string; question: AskedQuestion; resolve: (a: string | null) => void }>();
 
   constructor(
     private readonly events: RunEvents,
@@ -37,17 +40,18 @@ export class PendingQuestions {
 
   ask(runId: string, question: PendingQuestion): Promise<string | null> {
     const key = `${runId}:${question.id}`;
+    const asked: AskedQuestion = { ...question, expiresAt: new Date(Date.now() + this.timeoutMs).toISOString() };
     return new Promise((resolve) => {
       const timer = setTimeout(() => this.settle(key, null), this.timeoutMs);
       this.pending.set(key, {
         runId,
-        question,
+        question: asked,
         resolve: (a) => {
           clearTimeout(timer);
           resolve(a);
         },
       });
-      this.events.publish(runId, { type: 'question', question });
+      this.events.publish(runId, { type: 'question', question: asked });
     });
   }
 
@@ -55,7 +59,14 @@ export class PendingQuestions {
     return this.settle(`${runId}:${id}`, answer?.trim() ? answer.trim() : null);
   }
 
-  list(runId: string): PendingQuestion[] {
+  /** Number of open questions per run, for the runs list. */
+  counts(): Map<string, number> {
+    const counts = new Map<string, number>();
+    for (const p of this.pending.values()) counts.set(p.runId, (counts.get(p.runId) ?? 0) + 1);
+    return counts;
+  }
+
+  list(runId: string): AskedQuestion[] {
     return [...this.pending.values()].filter((p) => p.runId === runId).map((p) => p.question);
   }
 

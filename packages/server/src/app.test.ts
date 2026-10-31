@@ -88,8 +88,15 @@ describe('server', () => {
     const { app, events, worker } = await setup(5_000);
     const { runId } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml } })).json<{ runId: string }>();
     const seen: RunEvent[] = [];
+    const questionCounts: number[] = [];
     events.subscribe(runId, (e) => {
       seen.push(e);
+      if (e.type === 'question') {
+        expect(Date.parse(e.question.expiresAt)).toBeGreaterThan(Date.now());
+        void app
+          .inject('/api/runs')
+          .then((r) => questionCounts.push(r.json<{ id: string; pendingQuestions: number }[]>().find((x) => x.id === runId)!.pendingQuestions));
+      }
       if (e.type === 'question') void app.inject({ method: 'POST', url: `/api/runs/${runId}/answers`, payload: { questionId: e.question.id, answer: '24.90' } });
     });
     await worker.tick();
@@ -100,6 +107,10 @@ describe('server', () => {
     const analysis = (await app.inject(`/api/runs/${runId}/artifacts/analysis`)).json<{ products: { price: { status: string; amount: number | null } }[] }>();
     expect(analysis.products.some((p) => p.price.status === 'confirmed_by_user' && p.price.amount === 24.9)).toBe(true);
     expect(seen.at(-1)).toEqual({ type: 'run', status: 'succeeded' });
+    // While a question was open, the runs list said so; afterwards nothing is pending.
+    expect(questionCounts.length).toBeGreaterThan(0);
+    expect(questionCounts.every((n) => n >= 1)).toBe(true);
+    expect((await app.inject('/api/runs')).json<{ pendingQuestions: number }[]>()[0]!.pendingQuestions).toBe(0);
   });
 
   it('requeues jobs left running by a crash and rejects reruns of an active run', async () => {

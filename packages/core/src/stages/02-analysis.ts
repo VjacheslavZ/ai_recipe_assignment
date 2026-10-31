@@ -221,7 +221,7 @@ export async function confirmPrices(
     const suggestedAnswer = product.price.amount !== null ? String(product.price.amount) : null;
     const answer = await ask({
       id: questionId,
-      question: `Current price of ${product.name} (EUR)? Leave empty to omit.`,
+      question: `Current price of ${product.name} (EUR)?`,
       context: [product.url ?? product.price.sourceUrl, reason].filter(Boolean).join(' — '),
       ...(suggestedAnswer ? { suggestedAnswer } : {}),
     });

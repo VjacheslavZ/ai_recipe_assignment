@@ -52,12 +52,54 @@ export function useRunEvents(runId: string): LiveRun {
 
   useEffect(() => {
     dispatch({ type: 'reset' });
-    const source = new EventSource(`/api/runs/${runId}/events`);
+    let source: EventSource | null = null;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let closed = false;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
     const types: RunEvent['type'][] = ['snapshot', 'log', 'stage', 'ai_call', 'question', 'question_answered', 'run'];
-    for (const t of types) source.addEventListener(t, (msg) => dispatch(JSON.parse((msg as MessageEvent<string>).data) as RunEvent));
-    source.onopen = () => dispatch({ type: 'connected', value: true });
-    source.onerror = () => dispatch({ type: 'connected', value: false });
-    return () => source.close();
+
+    const reconnect = (attempt: number) => {
+      source?.close();
+      dispatch({ type: 'connected', value: false });
+      if (!closed) retry = setTimeout(() => connect(attempt + 1), Math.min(10_000, 1000 * 2 ** attempt));
+    };
+
+    const connect = (attempt: number) => {
+      source = new EventSource(`/api/runs/${runId}/events`);
+      // The server pings every 15 s; silence for longer means the connection is dead even if
+      // the browser has not noticed (e.g. a proxy kept it open after the server went away).
+      const alive = () => {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(() => reconnect(attempt), 40_000);
+      };
+      for (const t of types) {
+        source.addEventListener(t, (msg) => {
+          alive();
+          dispatch(JSON.parse((msg as MessageEvent<string>).data) as RunEvent);
+        });
+      }
+      source.addEventListener('ping', alive);
+      source.onopen = () => {
+        attempt = 0;
+        alive();
+        dispatch({ type: 'connected', value: true });
+      };
+      source.onerror = () => {
+        dispatch({ type: 'connected', value: false });
+        // The browser retries dropped connections itself, but gives up for good after an HTTP
+        // error (e.g. 502 from the dev proxy while the server restarts). Reconnect in that case;
+        // the server sends a fresh snapshot on every connection.
+        if (source?.readyState === EventSource.CLOSED) reconnect(attempt);
+      };
+    };
+    connect(0);
+
+    return () => {
+      closed = true;
+      clearTimeout(retry);
+      clearTimeout(watchdog);
+      source?.close();
+    };
   }, [runId]);
 
   return state;
