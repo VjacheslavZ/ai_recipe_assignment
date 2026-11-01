@@ -163,7 +163,7 @@ Estimates are the **author's active time**; waiting time (Claude Code writing co
 
 **Done when:** brief references only existing files; stage 01 registers all assets without warnings; stage 02 marks Instagram as "accessed via screenshots".
 
-### M3 — Stage 04: generation + compose → first post drafts · est. 1–1.5 h · **code DONE in mock mode (2026-10-30)**; real images, visual review and RF-001 experiment pending the API key and brand kit
+### M3 — Stage 04: generation + compose → first post drafts · est. 1–1.5 h · **code DONE in mock mode (2026-10-30)**; RF-001 experiment done 2026-11-01 (ADR-032: scene painted around the real product)
 
 - [x] Background prompt builder (style from analysis, scene from slide plan, explicit "no product, no logo, no text" constraints, safe area for product/text)
 - [x] Image generation call (size/quality from env), save raw background + prompt to `image_prompts.json`; unchanged backgrounds reused on re-run
@@ -240,7 +240,7 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | R5 | Ask audience | Form field + `brief.audience` |
 | R6 | Ask goals | Form field + `brief.goals[]` |
 | R7 | Ask references / inspiration | Form field + `brief.references[]` (links) |
-| R8 | Allow links or uploads of product images, logos, other references, if the approach uses them | UI uploads + `POST /api/assets`; `brand_kit/<brand>/` paths in the brief as fallback; `assets` table |
+| R8 | Allow links or uploads of product images, logos, other references, if the approach uses them | UI uploads; collection from the brand's website with vision checks (ADR-030); `brand_kit/<brand>/` as the base |
 | R9 | Prepare and attach own brief answers and inputs for the demo | `brief.example.yaml`, `brand_kit/gymbeamhr/` (+ `SOURCES.md`), copied into `runs/<final>/01_brief/` |
 | R10 | Study Instagram posts: tone, audience, themes, style, colours, product & people presentation | Stage 02 vision analysis of screenshots → `analysis.json` fields `tone`, `audience`, `content_pillars`, `visual_style`, `colors_hex`, `product_presentation`, `people_presentation` |
 | R11 | Use official site / shop / catalogue for facts | Stage 02 `web_search` scoped to gymbeam.hr; `sources.json` |
@@ -266,9 +266,9 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | R31 | Include key intermediate results: analysis, plan, generation prompts | `analysis.json/.md`, `plan.json/.md`, `image_prompts.json`, `compose_specs.json`, `review.json` in `runs/<final>/` |
 | R32 | Resume from a saved phase after interruption | Artifact-per-stage + `steps` status; server requeues stale jobs; UI "Rerun from this stage" |
 | R33 | Deliver 3 posts: media + texts with format, goal, short rationale | `posts.zip` incl. `POSTS.md` (format/goal/rationale per post) |
-| R34 | State Instagram profile, sources, input references needed to repeat | `brief.example.yaml`, `brand_kit/gymbeamhr/SOURCES.md`, `sources.json`, PDF |
+| R34 | State Instagram profile, sources, input references needed to repeat | `PROMPT.md` (starting prompt) / brief YAML, `brand_kit/gymbeamhr/` with `sources.json` (ADR-030), `sources.json` per run, PDF |
 | R35 | Recipe actually used: prompts or code (+ app link if any) | Repo; prompts in `packages/core/src/prompts/`; README run guide |
-| R36 | Start prompt/command | README + PDF: `docker compose up`, then "Load the GymBeam example" → "Start run" |
+| R36 | Start prompt/command | `PROMPT.md` (the starting prompt) + README + PDF: `docker compose up`, "Load the GymBeam example" → "Prepare brief" → "Start run" |
 | R37 | Tools and models | README "Tools & models"; `.env.example`; `runs/<id>/config.json` snapshot |
 | R38 | Settings | `.env.example`, `config_json` per run (size, quality, threshold, seed) |
 | R39 | All required manual actions | README "Human actions" (API key, Instagram screenshots, approve final selection) |
