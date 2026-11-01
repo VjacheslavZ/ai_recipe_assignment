@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { canvasFor, composeSlide, cutOutWhite, formatPrice, layoutBoxes, pickAccent, type Box, type ComposeInput } from './compose.js';
+import { canvasFor, composeSlide, cutOutWhite, formatPrice, layoutBoxes, pickAccent, prepareLogo, type Box, type ComposeInput } from './compose.js';
 
 const solid = (width: number, height: number, background: string) =>
   sharp({ create: { width, height, channels: 3, background } }).png().toBuffer();
@@ -10,6 +10,18 @@ async function packshot(): Promise<Buffer> {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="400" height="500" fill="#fff"/>
     <rect x="100" y="100" width="200" height="300" fill="#111"/><rect x="130" y="230" width="140" height="40" fill="#fff"/></svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+/** Black bars standing in for a wordmark, on an opaque background (like a downloaded logo.png). */
+async function wordmark(fill = '#000', background = '#fff'): Promise<Buffer> {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200"><rect width="300" height="200" fill="${background}"/>
+    <rect x="40" y="70" width="100" height="60" fill="${fill}"/><rect x="160" y="70" width="100" height="60" fill="${fill}"/></svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+async function pixels(png: Buffer) {
+  const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  return { info, at: (x: number, y: number) => [...data.subarray((y * info.width + x) * 4, (y * info.width + x) * 4 + 4)] };
 }
 
 async function input(overrides: Partial<ComposeInput> = {}): Promise<ComposeInput> {
@@ -22,7 +34,7 @@ async function input(overrides: Partial<ComposeInput> = {}): Promise<ComposeInpu
     priceLabel: null,
     product: await packshot(),
     productPlaceholder: 'GymBeam Creatine Monohydrate',
-    logo: await solid(300, 100, '#ffffff'),
+    logo: await wordmark(),
     colorsHex: ['#111111', '#FF6A00'],
     font: 'sans bold',
     ...overrides,
@@ -83,6 +95,16 @@ describe('composeSlide', () => {
     for (const p of res.placed) expect(inside(p.box, canvasFor('carousel'))).toBe(true);
   });
 
+  it('shows a black-on-white logo without its white background on a dark slide', async () => {
+    const res = await composeSlide(await input({ background: await solid(1024, 1024, '#202020') }));
+    const box = res.placed.find((p) => p.element === 'logo')!.box;
+    const { at } = await pixels(res.png);
+    const [r, g, b] = at(box.left + Math.floor(box.width / 2), box.top + Math.floor(box.height / 2));
+    // Centre of the logo is the gap between the bars: the dark slide shows through.
+    expect(Math.max(r!, g!, b!)).toBeLessThan(80);
+    expect(at(box.left + 2, box.top + Math.floor(box.height / 2)).slice(0, 3)).toEqual([255, 255, 255]);
+  });
+
   it('uses a labelled placeholder when the product photo is missing, and works without a logo', async () => {
     const res = await composeSlide(await input({ product: null, logo: null }));
     expect(res.placed.map((p) => p.element).sort()).toEqual(['product-placeholder', 'text']);
@@ -98,6 +120,24 @@ describe('cutOutWhite', () => {
     const alphaAt = (x: number, y: number) => data[(y * info.width + x) * 4 + 3];
     // White label stripe in the middle of the product stays opaque.
     expect(alphaAt(Math.floor(info.width / 2), Math.floor(info.height / 2))).toBe(255);
+  });
+
+  it('keeps white packaging opaque: only near-pure white counts as background', async () => {
+    // Off-white tub (shaded like real white packaging) touching a lighter highlight band.
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="400" height="500" fill="#fff"/>
+      <rect x="100" y="100" width="200" height="300" fill="#e8e8e8"/><rect x="100" y="100" width="200" height="20" fill="#f6f6f6"/></svg>`;
+    const cut = await cutOutWhite(await sharp(Buffer.from(svg)).png().toBuffer());
+    const { info, at } = await pixels(cut);
+    expect([info.width, info.height]).toEqual([200, 300]);
+    expect(at(100, 150)[3]).toBe(255);
+    expect(at(100, 10)[3]).toBe(255);
+  });
+
+  it('drops a pale reflection that is not attached to the product', async () => {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="400" height="500" fill="#fff"/>
+      <rect x="100" y="100" width="200" height="250" fill="#e04020"/><ellipse cx="200" cy="420" rx="120" ry="10" fill="#eeeeee"/></svg>`;
+    const cut = await cutOutWhite(await sharp(Buffer.from(svg)).png().toBuffer());
+    expect(await sharp(cut).metadata()).toMatchObject({ width: 200, height: 250 });
   });
 
   it('keeps images that are already transparent', async () => {

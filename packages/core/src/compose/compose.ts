@@ -108,33 +108,131 @@ export async function renderText(opts: {
 /**
  * Makes the white studio background of a packshot transparent. Flood-fills from
  * the image border so white areas inside the product (label text, lids) stay opaque.
+ * Only near-pure white is background: white packaging is shaded (about 230–245) and
+ * a looser threshold let the fill run into the tub and make it see-through.
  */
 export async function cutOutWhite(product: Buffer): Promise<Buffer> {
   const { data, info } = await sharp(product).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width: w, height: h } = info;
-  // Already cut out (transparent corner): keep as is.
-  if ((data[3] ?? 255) < 250) return sharp(product).png().toBuffer();
+  // Already cut out (transparent corner): only crop the empty margin, so the product fills its box.
+  if ((data[3] ?? 255) < 250) return sharp(product).trim().png().toBuffer().catch(() => sharp(product).png().toBuffer());
 
   const minChannel = (p: number) => Math.min(data[p * 4]!, data[p * 4 + 1]!, data[p * 4 + 2]!);
+  const background = new Uint8Array(w * h);
   const seen = new Uint8Array(w * h);
   const stack: number[] = [];
+  const neighbours = (p: number) => {
+    const x = p % w;
+    return [x > 0 ? p - 1 : -1, x < w - 1 ? p + 1 : -1, p >= w ? p - w : -1, p < w * (h - 1) ? p + w : -1].filter((q) => q >= 0);
+  };
   for (let x = 0; x < w; x++) stack.push(x, (h - 1) * w + x);
   for (let y = 0; y < h; y++) stack.push(y * w, y * w + w - 1);
   while (stack.length) {
     const p = stack.pop()!;
     if (seen[p]) continue;
     seen[p] = 1;
-    const min = minChannel(p);
-    if (min <= 225) continue;
-    // Soft edge: fully transparent above 245, feathered between 225 and 245.
-    data[p * 4 + 3] = min > 245 ? 0 : Math.round(((245 - min) / 20) * 255);
-    const x = p % w;
-    if (x > 0) stack.push(p - 1);
-    if (x < w - 1) stack.push(p + 1);
-    if (p >= w) stack.push(p - w);
-    if (p < w * (h - 1)) stack.push(p + w);
+    if (minChannel(p) < 250) continue;
+    background[p] = 1;
+    data[p * 4 + 3] = 0;
+    stack.push(...neighbours(p));
+  }
+  // Soft edge: the one-pixel ring of product next to the background fades by its lightness.
+  for (let p = 0; p < w * h; p++) {
+    if (background[p] || !neighbours(p).some((q) => background[q])) continue;
+    data[p * 4 + 3] = Math.min(255, Math.round(((255 - minChannel(p)) / 40) * 255));
+  }
+  // A studio shadow or reflection that is not attached to the product (light grey, no colour,
+  // no dark pixels) would show as a pale smudge on a dark slide: drop it. Separate parts with
+  // colour or dark areas (e.g. a second item in the shot) stay.
+  const part = new Int32Array(w * h).fill(-1);
+  const parts: { size: number; pale: boolean }[] = [];
+  for (let start = 0; start < w * h; start++) {
+    if (background[start] || part[start]! >= 0) continue;
+    const id = parts.length;
+    const info = { size: 0, pale: true };
+    parts.push(info);
+    stack.push(start);
+    part[start] = id;
+    while (stack.length) {
+      const p = stack.pop()!;
+      info.size++;
+      const i = p * 4;
+      if (minChannel(p) < 200 || Math.max(data[i]!, data[i + 1]!, data[i + 2]!) - minChannel(p) > 12) info.pale = false;
+      for (const q of neighbours(p)) {
+        if (background[q] || part[q]! >= 0) continue;
+        part[q] = id;
+        stack.push(q);
+      }
+    }
+  }
+  const largest = parts.reduce((best, p, i) => (p.size > (parts[best]?.size ?? 0) ? i : best), 0);
+  for (let p = 0; p < w * h; p++) {
+    if (part[p]! < 0 || part[p] === largest || !parts[part[p]!]!.pale) continue;
+    // White as well as transparent, so trim() crops it away like the background.
+    data.fill(255, p * 4, p * 4 + 3);
+    data[p * 4 + 3] = 0;
   }
   return sharp(data, { raw: { width: w, height: h, channels: 4 } }).trim().png().toBuffer();
+}
+
+/**
+ * Makes a logo file usable on any slide. A one-colour logo (e.g. a black wordmark on
+ * white, the usual download) becomes a transparent mask, painted white on a dark
+ * backdrop and black on a light one. A multi-colour logo keeps its colours; only a
+ * white background is removed. The result is cropped to the logo itself.
+ */
+export async function prepareLogo(logo: Buffer, backdropLuminance: number): Promise<Buffer> {
+  const { data, info } = await sharp(logo).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width: w, height: h } = info;
+  const n = w * h;
+  const transparent = (data[3] ?? 255) < 250;
+  const [br, bg, bb] = [data[0]!, data[1]!, data[2]!];
+  // How strongly each pixel belongs to the logo: its alpha, or its distance from the background colour.
+  const ink = new Uint8Array(n);
+  for (let p = 0; p < n; p++) {
+    const i = p * 4;
+    ink[p] = transparent ? data[i + 3]! : Math.max(Math.abs(data[i]! - br), Math.abs(data[i + 1]! - bg), Math.abs(data[i + 2]! - bb));
+  }
+  let maxInk = 0;
+  let inkPixels = 0;
+  let colourful = 0;
+  for (let p = 0; p < n; p++) {
+    maxInk = Math.max(maxInk, ink[p]!);
+    if (ink[p]! < 128) continue;
+    inkPixels++;
+    const i = p * 4;
+    if (Math.max(data[i]!, data[i + 1]!, data[i + 2]!) - Math.min(data[i]!, data[i + 1]!, data[i + 2]!) > 60) colourful++;
+  }
+  // Blank image: nothing to cut out.
+  if (!inkPixels) return sharp(logo).png().toBuffer();
+
+  let out: Buffer;
+  if (colourful / inkPixels < 0.05) {
+    const v = backdropLuminance > 0.6 ? 0 : 255;
+    out = Buffer.alloc(n * 4);
+    for (let p = 0; p < n; p++) {
+      out[p * 4] = out[p * 4 + 1] = out[p * 4 + 2] = v;
+      out[p * 4 + 3] = transparent ? ink[p]! : Math.round((ink[p]! * 255) / maxInk);
+    }
+  } else {
+    if (!transparent) return cutOutWhite(logo);
+    out = data;
+  }
+  // Crop to the visible pixels (trim() would compare colours, which are uniform here).
+  let [x0, y0, x1, y1] = [w, h, -1, -1];
+  for (let p = 0; p < n; p++) {
+    if (out[p * 4 + 3]! < 16) continue;
+    const x = p % w;
+    const y = Math.floor(p / w);
+    x0 = Math.min(x0, x);
+    y0 = Math.min(y0, y);
+    x1 = Math.max(x1, x);
+    y1 = Math.max(y1, y);
+  }
+  return sharp(out, { raw: { width: w, height: h, channels: 4 } })
+    .extract({ left: x0, top: y0, width: x1 - x0 + 1, height: y1 - y0 + 1 })
+    .png()
+    .toBuffer();
 }
 
 async function fitInto(img: Buffer, box: Box): Promise<{ png: Buffer; left: number; top: number; width: number; height: number }> {
@@ -248,7 +346,12 @@ export async function composeSlide(input: ComposeInput): Promise<ComposeResult> 
   const { canvas } = input;
   const layout = layoutBoxes(canvas, input.layout);
   const accent = pickAccent(input.colorsHex);
-  const layers: OverlayOptions[] = [{ input: scrim(canvas, layout.text), left: 0, top: 0 }];
+  const backdrop = await sharp(input.background)
+    .resize(canvas.width, canvas.height, { fit: 'cover', position: 'attention' })
+    .composite([{ input: scrim(canvas, layout.text), left: 0, top: 0 }])
+    .png()
+    .toBuffer();
+  const layers: OverlayOptions[] = [];
   const placed: ComposeResult['placed'] = [];
 
   if (layout.product) {
@@ -280,7 +383,9 @@ export async function composeSlide(input: ComposeInput): Promise<ComposeResult> 
   placed.push({ element: 'text', box: { left: textLeft, top: layout.text.top, width: text.width, height: text.height } });
 
   if (input.logo) {
-    const fit = await fitInto(input.logo, layout.logo);
+    const { channels } = await sharp(backdrop).extract(layout.logo).stats();
+    const luminance = (0.2126 * channels[0]!.mean + 0.7152 * channels[1]!.mean + 0.0722 * channels[2]!.mean) / 255;
+    const fit = await fitInto(await prepareLogo(input.logo, luminance), layout.logo);
     // Left-align the logo inside its box instead of centring it.
     layers.push({ input: fit.png, left: layout.logo.left, top: fit.top });
     placed.push({ element: 'logo', box: { left: layout.logo.left, top: fit.top, width: fit.width, height: fit.height } });
@@ -295,8 +400,7 @@ export async function composeSlide(input: ComposeInput): Promise<ComposeResult> 
     placed.push({ element: 'price', box: { left, top, width: badge.width, height: badge.height } });
   }
 
-  const png = await sharp(input.background)
-    .resize(canvas.width, canvas.height, { fit: 'cover', position: 'attention' })
+  const png = await sharp(backdrop)
     .composite(layers)
     .png()
     .toBuffer();
