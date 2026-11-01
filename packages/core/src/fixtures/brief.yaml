@@ -3,7 +3,7 @@
 
 brand:
   name: GymBeam Croatia
-  # Names the brand-kit folder: brand_kit/<slug>/ (logo, products, screenshots).
+  # Names the run folders: runs/<slug>_<date>/.
   slug: gymbeamhr
   instagramHandle: "@gymbeamhr"
   instagramUrl: https://www.instagram.com/gymbeamhr/
@@ -31,7 +31,7 @@ products:
     name: GymBeam True Whey Protein
     # Found by "Find the logo and product photos"; VERIFY it is the product you mean.
     url: https://gymbeam.hr/protein-wpc-80-gymbeam.html
-    # File in brand_kit/gymbeamhr/products/ (collected from the page above, see sources.json).
+    # File in the run's inputs/products/ (collected from the page above, see sources.json).
     imageFile: gymbeam-true-whey-protein.png
     notes: Flagship whey protein; pick one flavour and use the matching packshot.
   - # VERIFY
@@ -57,10 +57,10 @@ goals:
   - "Engagement: spark comments with a simple, on-brand question."
   - "Purchase intent: present a product with a clear call to action to the shop."
 
-# Inspiration and references. `url` or `file` (relative to brand_kit/<slug>/).
+# Inspiration and references. `url` or `file` (relative to the run's inputs/).
 references:
   - url: https://www.instagram.com/gymbeamhr/
-    note: The brand's own feed — the main style reference (analysed via screenshots in brand_kit/gymbeamhr/instagram/).
+    note: The brand's own feed — the main style reference (analysed via the uploaded screenshots).
   - url: https://gymbeam.hr
     note: Official shop — product facts, prices and packshots.
 

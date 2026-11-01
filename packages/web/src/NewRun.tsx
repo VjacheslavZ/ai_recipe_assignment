@@ -1,21 +1,66 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { api, type BriefDraft, type KitItem, type OpenAiCheck } from './api.ts';
+import { api, type BriefDraft, type KitFiles, type KitItem, type OpenAiCheck } from './api.ts';
 
-function FilePicker(props: { name: string; label: string; hint: string; multiple?: boolean; files: File[]; onChange: (f: File[]) => void }) {
+type KitField = 'logo' | 'products' | 'screenshots';
+
+const checker = 'bg-[repeating-conic-gradient(#e5e5e5_0_25%,#fff_0_50%)] bg-[length:12px_12px]';
+
+/** One input file as a small preview, with what it is used for and a way to remove it. */
+function Tile({ src, name, note, warn, onRemove }: { src: string; name: string; note: string; warn?: boolean; onRemove: () => void }) {
   return (
-    <label className="block rounded-md border border-dashed border-ink-faint/60 bg-paper/60 px-4 py-3 hover:border-ink-soft">
-      <span className="block text-sm font-semibold">{props.label}</span>
-      <span className="block text-xs text-ink-soft">{props.hint}</span>
-      <input
-        type="file"
-        name={props.name}
-        accept="image/png,image/jpeg,image/webp"
-        multiple={props.multiple}
-        className="mt-2 block w-full text-xs file:mr-3 file:rounded file:border-0 file:bg-ink file:px-3 file:py-1.5 file:text-paper"
-        onChange={(e) => props.onChange([...(e.target.files ?? [])])}
-      />
-      {props.files.length > 0 && <span className="mt-1 block text-xs text-ink-soft">{props.files.map((f) => f.name).join(', ')}</span>}
-    </label>
+    <li className="relative w-[4.75rem]">
+      <img src={src} alt={name} title={name} className={`h-[4.75rem] w-[4.75rem] rounded border border-rule object-contain ${checker}`} />
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${name}`}
+        className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-ink text-xs leading-none text-paper hover:bg-pencil"
+      >
+        ×
+      </button>
+      <span className={`mt-1 block truncate text-[10px] leading-tight ${warn ? 'text-pencil' : 'text-ink-soft'}`} title={note}>
+        {note}
+      </span>
+    </li>
+  );
+}
+
+/** A group of input files (logo, products, screenshots) with its upload button. */
+function FileGroup(props: {
+  field: KitField;
+  label: string;
+  use: string;
+  multiple?: boolean;
+  busy: boolean;
+  children: ReactNode;
+  empty: string;
+  count: number;
+  onAdd: (field: KitField, files: File[]) => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold">
+          {props.label}
+          {props.count > 1 && <span className="ml-1 font-normal text-ink-soft">({props.count})</span>}
+        </h3>
+        <label className={`shrink-0 cursor-pointer text-xs font-medium text-active underline underline-offset-2 ${props.busy ? 'pointer-events-none opacity-40' : ''}`}>
+          {props.count && !props.multiple ? 'Replace' : 'Add'}
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            multiple={props.multiple}
+            className="sr-only"
+            onChange={(e) => {
+              props.onAdd(props.field, [...(e.target.files ?? [])]);
+              e.target.value = '';
+            }}
+          />
+        </label>
+      </div>
+      <p className="text-xs text-ink-soft">{props.use}</p>
+      {props.count ? <ul className="mt-2 flex flex-wrap gap-2.5">{props.children}</ul> : <p className="mt-2 rounded border border-dashed border-ink-faint/60 px-3 py-2 text-xs text-ink-faint">{props.empty}</p>}
+    </div>
   );
 }
 
@@ -94,22 +139,16 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Thumb({ slug, file, version, label }: { slug: string; file: string; version: number; label: string }) {
-  return (
-    <img
-      src={`/api/brand-kit/${slug}/${file}?v=${version}`}
-      alt={label}
-      className="h-14 w-14 shrink-0 rounded border border-rule bg-[repeating-conic-gradient(#e5e5e5_0_25%,#fff_0_50%)] bg-[length:12px_12px] object-contain"
-    />
-  );
+function Thumb({ src, label }: { src: string; label: string }) {
+  return <img src={src} alt={label} className={`h-14 w-14 shrink-0 rounded border border-rule object-contain ${checker}`} />;
 }
 
-const KIT_STATUS: Record<KitItem['status'], string> = { collected: 'Taken from the website', kept: 'Already in the brand kit', not_found: 'Not found' };
+const KIT_STATUS: Record<KitItem['status'], string> = { collected: 'Taken from the website', kept: 'Already among your files', not_found: 'Not found' };
 
 interface KitProps {
   collecting: boolean;
-  /** Bumps after a collection, so previews reload. */
-  version: number;
+  /** URL of an input file of this page (reloads after uploads and collections). */
+  url: (rel: string) => string;
   results: KitItem[] | null;
   onCollect: () => void;
 }
@@ -160,11 +199,10 @@ function BriefCard({ draft, stale, kitProps }: { draft: BriefDraft; stale: boole
           </Field>
           <Field label="Logo">
             {kit?.logo ? (
-              <Thumb slug={b.brand.slug} file={kit.logo} version={kitProps.version} label={`${b.brand.name} logo`} />
+              <Thumb src={kitProps.url(kit.logo)} label={`${b.brand.name} logo`} />
             ) : (
               <span className="text-pencil">Missing: slides will have no logo</span>
             )}
-            <span className="mt-1 block font-mono text-xs text-ink-soft">brand_kit/{b.brand.slug}/</span>
           </Field>
           <Field label="Products">
             <ul className="space-y-2">
@@ -173,7 +211,7 @@ function BriefCard({ draft, stale, kitProps }: { draft: BriefDraft; stale: boole
                 return (
                   <li key={p.name} className="flex items-start gap-3">
                     {photo?.exists && photo.imageFile ? (
-                      <Thumb slug={b.brand.slug} file={`products/${photo.imageFile}`} version={kitProps.version} label={p.name} />
+                      <Thumb src={kitProps.url(`products/${photo.imageFile}`)} label={p.name} />
                     ) : (
                       <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-dashed border-pencil text-center text-[10px] leading-tight text-pencil">
                         no photo
@@ -190,7 +228,7 @@ function BriefCard({ draft, stale, kitProps }: { draft: BriefDraft; stale: boole
           </Field>
           <Field label="Instagram screenshots">
             {kit?.instagramScreenshots.length ? (
-              `${kit.instagramScreenshots.length} in the brand kit`
+              `${kit.instagramScreenshots.length} for the style analysis`
             ) : (
               <span className="text-ink-soft">None: the style analysis uses the website only. Add 6–10 screenshots to improve it.</span>
             )}
@@ -284,9 +322,10 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
   const [draftedFrom, setDraftedFrom] = useState('');
   const [yaml, setYaml] = useState('');
   const [showYaml, setShowYaml] = useState(false);
-  const [logo, setLogo] = useState<File[]>([]);
-  const [products, setProducts] = useState<File[]>([]);
-  const [screenshots, setScreenshots] = useState<File[]>([]);
+  // This page's input files (ADR-033): uploaded right away, previewed, moved into the run on start.
+  const [kitId, setKitId] = useState<string | null>(null);
+  const [files, setFiles] = useState<KitFiles>({ logo: null, products: [], instagram: [] });
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -294,8 +333,34 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
   const [kitVersion, setKitVersion] = useState(0);
   const [kitResults, setKitResults] = useState<KitItem[] | null>(null);
 
+  useEffect(() => {
+    api
+      .createKit()
+      .then(({ kitId: id, files: f }) => {
+        setKitId(id);
+        setFiles(f);
+      })
+      .catch((e: Error) => setError(e.message));
+  }, []);
+
+  const changeFiles = async (change: () => Promise<KitFiles>) => {
+    setUploading(true);
+    setError(null);
+    try {
+      setFiles(await change());
+      setKitVersion((v) => v + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  };
+  const addFiles = (field: KitField, picked: File[]) => kitId && picked.length && void changeFiles(() => api.uploadKitFiles(kitId, field, picked));
+  const removeFile = (rel: string) => kitId && void changeFiles(() => api.removeKitFile(kitId, rel));
+  const fileUrl = (rel: string) => (kitId ? api.kitFileUrl(kitId, rel, kitVersion) : '');
+
   // Product photos take part in the brief (matched to products), so new uploads also need a new draft.
-  const draftKey = `${text.trim()}\n${products.map((f) => f.name).join('\n')}`;
+  const draftKey = `${text.trim()}\n${files.products.join('\n')}`;
   const stale = draft !== null && draftKey !== draftedFrom;
   const yamlEdited = draft !== null && yaml !== draft.yaml;
   const ready = draft !== null && !stale && (yamlEdited || (draft.missing.length === 0 && draft.issues.length === 0));
@@ -304,6 +369,7 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
     setError(null);
     try {
       setText(await api.exampleRequest());
+      if (kitId) await changeFiles(() => api.loadKitExample(kitId));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -313,7 +379,7 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
     setPreparing(true);
     setError(null);
     try {
-      const d = await api.draftBrief(text, products.map((f) => f.name));
+      const d = await api.draftBrief(text, kitId ?? '');
       setDraft(d);
       setYaml(d.yaml);
       setKitResults(null);
@@ -326,15 +392,16 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
   };
 
   const collect = async () => {
-    if (!draft) return;
+    if (!draft || !kitId) return;
     setCollecting(true);
     setError(null);
     try {
-      const c = await api.collectKit(yaml, draft.draftId);
+      const c = await api.collectKit(yaml, draft.draftId, kitId);
       // The brief now names the found pages and photo files; it counts as prepared, not edited.
       setDraft({ ...draft, yaml: c.yaml, brief: c.brief, warnings: c.warnings, kit: c.kit });
       setYaml(c.yaml);
       setKitResults(c.items);
+      setFiles(c.files);
       setKitVersion((v) => v + 1);
     } catch (e) {
       setError((e as Error).message);
@@ -345,17 +412,11 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!draft) return;
+    if (!draft || !kitId) return;
     setBusy(true);
     setError(null);
-    const form = new FormData();
-    form.append('brief', yaml);
-    form.append('draftId', draft.draftId);
-    for (const f of logo) form.append('logo', f);
-    for (const f of products) form.append('products', f);
-    for (const f of screenshots) form.append('screenshots', f);
     try {
-      const { runId } = await api.createRun(form);
+      const { runId } = await api.createRun(yaml, draft.draftId, kitId);
       onCreated(runId);
     } catch (err) {
       setError((err as Error).message);
@@ -404,7 +465,7 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
             </button>
           </section>
 
-          {draft && <BriefCard draft={draft} stale={stale} kitProps={{ collecting, version: kitVersion, results: kitResults, onCollect: () => void collect() }} />}
+          {draft && <BriefCard draft={draft} stale={stale} kitProps={{ collecting, url: fileUrl, results: kitResults, onCollect: () => void collect() }} />}
 
           {draft && (
             <div className="mt-3">
@@ -429,21 +490,55 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
 
         <div className="space-y-6">
           <OpenAiSetup />
-          <section aria-labelledby="kit-label" className="space-y-3">
-            <h2 id="kit-label" className="text-sm font-semibold">
-              Brand kit for this run
-            </h2>
-            <p className="text-xs text-ink-soft">Optional. Anything you leave out comes from the repository’s brand_kit folder.</p>
-            <FilePicker name="logo" label="Logo" hint="PNG, transparent background works best" files={logo} onChange={setLogo} />
-            <FilePicker
-              name="products"
+          <section aria-labelledby="kit-label" className="space-y-5 rounded-md bg-paper px-4 py-4 shadow-[0_1px_0_var(--color-rule)]">
+            <div>
+              <h2 id="kit-label" className="text-sm font-semibold">
+                Files for this run
+              </h2>
+              <p className="mt-1 text-xs text-ink-soft">Uploaded for this run only. The run keeps its own copy; nothing is shared between runs.</p>
+            </div>
+            <FileGroup field="logo" label="Logo" use="Placed on every slide, never redrawn." busy={uploading || !kitId} count={files.logo ? 1 : 0} empty="No logo: slides will have none." onAdd={addFiles}>
+              {files.logo && <Tile src={fileUrl(files.logo)} name="logo.png" note="every slide" onRemove={() => removeFile(files.logo!)} />}
+            </FileGroup>
+            <FileGroup
+              field="products"
               label="Product photos"
-              hint="Matched to products by file name when the brief is prepared"
+              use="Composited as they are. Matched to products when the brief is prepared."
               multiple
-              files={products}
-              onChange={setProducts}
-            />
-            <FilePicker name="screenshots" label="Instagram screenshots" hint="6–10 recent posts, used for the style analysis" multiple files={screenshots} onChange={setScreenshots} />
+              busy={uploading || !kitId}
+              count={files.products.length}
+              empty="No photos yet. Upload them or find them on the brand's website after preparing the brief."
+              onAdd={addFiles}
+            >
+              {files.products.map((rel) => {
+                const name = rel.slice('products/'.length);
+                const product = draft?.brief?.products.find((p) => p.imageFile === name);
+                return (
+                  <Tile
+                    key={rel}
+                    src={fileUrl(rel)}
+                    name={name}
+                    note={product ? product.name : draft?.brief ? 'not used in the brief' : name}
+                    warn={Boolean(draft?.brief) && !product}
+                    onRemove={() => removeFile(rel)}
+                  />
+                );
+              })}
+            </FileGroup>
+            <FileGroup
+              field="screenshots"
+              label="Instagram screenshots"
+              use="6–10 recent posts; a vision model reads the brand's style from them."
+              multiple
+              busy={uploading || !kitId}
+              count={files.instagram.length}
+              empty="None: the style comes from the website only."
+              onAdd={addFiles}
+            >
+              {files.instagram.map((rel) => (
+                <Tile key={rel} src={fileUrl(rel)} name={rel.slice('instagram/'.length)} note="style" onRemove={() => removeFile(rel)} />
+              ))}
+            </FileGroup>
           </section>
         </div>
       </div>

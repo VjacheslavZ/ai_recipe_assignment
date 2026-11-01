@@ -42,9 +42,18 @@ export interface Question {
   expiresAt: string;
 }
 
+/** Input files of a run or of the page being prepared: paths relative to the kit folder. */
+export interface KitFiles {
+  logo: string | null;
+  products: string[];
+  instagram: string[];
+}
+
 export interface RunDetail extends RunRow {
   state: { stages: Record<Stage, StageState> };
   questions: Question[];
+  /** The files the run was made from; `base` + `/` + path is their URL. Null for older runs. */
+  inputs: (KitFiles & { base: string }) | null;
 }
 
 export interface AiCall {
@@ -177,6 +186,7 @@ export interface KitCollection {
   warnings: string[];
   items: KitItem[];
   kit: KitStatus;
+  files: KitFiles;
   costUsd: number;
 }
 
@@ -196,11 +206,20 @@ export const api = {
   checkOpenAi: () => request<OpenAiCheck>('/api/openai/check'),
   exampleBrief: () => request<string>('/api/example-brief'),
   exampleRequest: () => request<string>('/api/example-request'),
-  draftBrief: (text: string, productFiles: string[]) => request<BriefDraft>('/api/brief/draft', json({ text, productFiles })),
-  collectKit: (yaml: string, draftId: string) => request<KitCollection>('/api/brief/collect', json({ yaml, draftId })),
+  createKit: () => request<{ kitId: string; files: KitFiles }>('/api/kits', { method: 'POST' }),
+  uploadKitFiles: (kitId: string, field: 'logo' | 'products' | 'screenshots', files: File[]) => {
+    const form = new FormData();
+    for (const f of files) form.append(field, f);
+    return request<KitFiles>(`/api/kits/${kitId}/files`, { method: 'POST', body: form });
+  },
+  removeKitFile: (kitId: string, rel: string) => request<KitFiles>(`/api/kits/${kitId}/files/${rel}`, { method: 'DELETE' }),
+  loadKitExample: (kitId: string) => request<KitFiles>(`/api/kits/${kitId}/example`, { method: 'POST' }),
+  kitFileUrl: (kitId: string, rel: string, version: number) => `/api/kits/${kitId}/files/${rel}?v=${version}`,
+  draftBrief: (text: string, kitId: string) => request<BriefDraft>('/api/brief/draft', json({ text, kitId })),
+  collectKit: (yaml: string, draftId: string, kitId: string) => request<KitCollection>('/api/brief/collect', json({ yaml, draftId, kitId })),
   listRuns: () => request<RunRow[]>('/api/runs'),
   getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),
-  createRun: (form: FormData) => request<{ runId: string }>('/api/runs', { method: 'POST', body: form }),
+  createRun: (briefYaml: string, draftId: string, kitId: string) => request<{ runId: string }>('/api/runs', json({ briefYaml, draftId, kitId })),
   rerun: (id: string, fromStep: number) => request<{ queued: boolean }>(`/api/runs/${id}/rerun`, json({ fromStep })),
   answer: (id: string, questionId: string, answer: string | null) => request<{ ok: boolean }>(`/api/runs/${id}/answers`, json({ questionId, answer })),
   posts: (id: string) => request<PostsResponse>(`/api/runs/${id}/posts`),

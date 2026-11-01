@@ -28,13 +28,13 @@ describe('mockFixtures', () => {
 describe('stages 01–03 end to end with fixtures', () => {
   it('runs brief → analysis → plan and writes valid artifacts', async () => {
     const kitDir = tempDir('kit');
-    const igDir = path.join(kitDir, 'gymbeamhr', 'instagram');
+    const igDir = path.join(kitDir, 'instagram');
     mkdirSync(igDir, { recursive: true });
     writeFileSync(path.join(igDir, '01.png'), '');
     writeFileSync(path.join(igDir, '02.png'), '');
 
     const ai = fakeAi(mockFixtures);
-    const ctx = makeContext({ ai, brandKitDir: kitDir, ask: async (q) => (q.id.includes('creatine') ? '19.90' : null) });
+    const ctx = makeContext({ ai, kitDir, ask: async (q) => (q.id.includes('creatine') ? '19.90' : null) });
     copyFileSync(path.join(findRepoRoot(), FIXTURE_BRIEF), ctx.store.path('brief', 'brief.input.yaml'));
 
     expect(stages.map((s) => [s.no, s.id])).toEqual([[1, 'brief'], [2, 'analysis'], [3, 'plan'], [4, 'create'], [5, 'review']]);

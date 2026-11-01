@@ -12,8 +12,8 @@ const config = parseConfig({ AI_PROVIDER: 'mock' }, '/tmp');
 
 function kit(files: string[]): string {
   const dir = mkdtempSync(path.join(tmpdir(), 'recipe-kit-'));
-  mkdirSync(path.join(dir, 'gymbeamhr', 'products'), { recursive: true });
-  for (const f of files) writeFileSync(path.join(dir, 'gymbeamhr', 'products', f), '');
+  mkdirSync(path.join(dir, 'products'), { recursive: true });
+  for (const f of files) writeFileSync(path.join(dir, 'products', f), '');
   return dir;
 }
 
@@ -27,7 +27,7 @@ describe('draftBrief', () => {
       ],
     };
     const ai = createMockClient(config, { fixtures: { 'brief.intake': draftModel }, delayMs: 0 });
-    const draft = await draftBrief(ai, { text: 'GymBeam posts', brandKitDir: kit(['true-whey.png']) });
+    const draft = await draftBrief(ai, { text: 'GymBeam posts', kitDir: kit(['true-whey.png']) });
 
     expect(draft.missing).toEqual([]);
     expect(draft.brief?.brand).toMatchObject({ slug: 'gymbeamhr', website: 'https://gymbeam.hr' });
@@ -59,7 +59,7 @@ describe('draftBrief', () => {
     expect((input.brand as { shopUrls: string[] }).shopUrls).toEqual(['https://shop.example.com']);
   });
 
-  it('derives the brand-kit folder from the Instagram handle', () => {
+  it('derives the brand slug from the Instagram handle', () => {
     expect(slugFromHandle('@GymBeam.HR')).toBe('gymbeam-hr');
     expect(slugFromHandle('gymbeamhr')).toBe('gymbeamhr');
   });

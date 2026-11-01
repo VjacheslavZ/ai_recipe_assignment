@@ -21,7 +21,8 @@ export interface StageContext {
   config: Config;
   ai: AiClient;
   store: RunStore;
-  brandKitDir: string;
+  /** The run's input files: `logo.png`, `products/`, `instagram/` (uploaded per run, ADR-033). */
+  kitDir: string;
   log: (msg: string) => void;
   /** Ask the human (CLI prompt now, UI form later). Returns null if unanswered/non-interactive. */
   ask: (q: PendingQuestion) => Promise<string | null>;

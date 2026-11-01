@@ -1,7 +1,11 @@
+import path from 'node:path';
 import type { AiClient } from '../ai/types.js';
 import type { Config } from '../config.js';
 import type { CostReport, RunStore } from '../run/store.js';
 import type { PendingQuestion, Stage, StageContext, StageDefinition, StageStatus } from './types.js';
+
+/** Folder inside a run that holds its input files (logo, product photos, screenshots). */
+export const RUN_INPUTS_DIR = 'inputs';
 
 export interface RunPipelineOptions {
   stages: StageDefinition[];
@@ -14,8 +18,8 @@ export interface RunPipelineOptions {
   toStep?: number;
   ask?: (q: PendingQuestion) => Promise<string | null>;
   log?: (msg: string) => void;
-  /** Brand kit root; default `config.BRAND_KIT_DIR` (the server passes a per-run copy with uploads). */
-  brandKitDir?: string;
+  /** The run's input files; default `<runDir>/inputs` (where the server puts the uploads). */
+  kitDir?: string;
   /** Called after every stage status change (the server turns these into SSE events). */
   onStage?: (stage: Stage, status: StageStatus, error?: string) => void;
 }
@@ -82,7 +86,7 @@ export async function runPipeline(opts: RunPipelineOptions): Promise<RunPipeline
     config,
     ai,
     store,
-    brandKitDir: opts.brandKitDir ?? config.BRAND_KIT_DIR,
+    kitDir: opts.kitDir ?? path.join(store.runDir, RUN_INPUTS_DIR),
     log,
     ask,
   };

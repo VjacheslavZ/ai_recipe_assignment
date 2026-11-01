@@ -32,7 +32,6 @@ export const envSchema = z.object({
   MAX_REGENERATIONS: z.coerce.number().int().min(0).default(1),
   DATABASE_PATH: z.string().min(1).default('./data/recipe.db'),
   RUNS_DIR: z.string().min(1).default('./runs'),
-  BRAND_KIT_DIR: z.string().min(1).default('./brand_kit'),
   PORT: z.coerce.number().int().positive().default(3001),
   // compose.yaml sets 0.0.0.0 so the web container can reach the API.
   HOST: z.string().min(1).default('127.0.0.1'),
@@ -61,7 +60,6 @@ export function parseConfig(env: Record<string, string | undefined>, rootDir = f
     rootDir,
     DATABASE_PATH: abs(e.DATABASE_PATH),
     RUNS_DIR: abs(e.RUNS_DIR),
-    BRAND_KIT_DIR: abs(e.BRAND_KIT_DIR),
   };
 }
 

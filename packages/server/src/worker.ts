@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { createAiClient, mockFixtures, runPipeline, RunStore, STAGES, stages, type Config } from '@recipe/core';
 import { and, asc, eq } from 'drizzle-orm';
 import { aiCalls, jobs, runs, steps, type Db } from './db.js';
@@ -104,7 +106,8 @@ export class JobWorker {
         store,
         config,
         ai,
-        brandKitDir: run.brandKitDir,
+        // Runs created before ADR-033 kept their files in <kit>/<slug>/.
+        kitDir: existsSync(path.join(run.brandKitDir, run.brandSlug)) ? path.join(run.brandKitDir, run.brandSlug) : run.brandKitDir,
         fromStep: payload.fromStep,
         toStep: payload.toStep,
         ask: (q) => questions.ask(run.id, q),

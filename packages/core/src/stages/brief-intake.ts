@@ -26,12 +26,13 @@ export interface BriefDraft {
 
 export interface DraftBriefOptions {
   text: string;
-  brandKitDir: string;
+  /** The run's input folder (`products/` holds the photos the brief may name). */
+  kitDir: string;
   /** File names of product photos uploaded with this request. */
   uploadedProductFiles?: string[];
 }
 
-/** `@GymBeam.HR` → `gymbeam-hr`: the brand-kit folder name. */
+/** `@GymBeam.HR` → `gymbeam-hr`: the brand slug (names the run folders). */
 export function slugFromHandle(handle: string): string {
   return handle
     .replace(/^@/, '')
@@ -40,14 +41,9 @@ export function slugFromHandle(handle: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-function productFilesIn(brandKitDir: string): string[] {
-  if (!existsSync(brandKitDir)) return [];
-  return readdirSync(brandKitDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .flatMap((d) => {
-      const dir = path.join(brandKitDir, d.name, 'products');
-      return existsSync(dir) ? readdirSync(dir).filter((f) => IMAGE_EXT.test(f)) : [];
-    });
+function productFilesIn(kitDir: string): string[] {
+  const dir = path.join(kitDir, 'products');
+  return existsSync(dir) ? readdirSync(dir).filter((f) => IMAGE_EXT.test(f)) : [];
 }
 
 const blank = (s: string | null | undefined) => !s || !s.trim();
@@ -108,7 +104,7 @@ function prune(value: unknown): unknown {
 /** Free text → brief, with one cheap text-model call (purpose `brief.intake`). */
 export async function draftBrief(ai: AiClient, opts: DraftBriefOptions): Promise<BriefDraft> {
   const uploaded = opts.uploadedProductFiles ?? [];
-  const productFiles = [...new Set([...uploaded, ...productFilesIn(opts.brandKitDir)])].sort();
+  const productFiles = [...new Set([...uploaded, ...productFilesIn(opts.kitDir)])].sort();
   const prompt = buildBriefIntakePrompt({ text: opts.text, productFiles });
   const res = await ai.structured({
     purpose: 'brief.intake',

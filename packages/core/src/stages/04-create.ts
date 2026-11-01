@@ -114,8 +114,7 @@ export interface BrandAssets {
   products: Map<string, Buffer | null>;
 }
 
-export function loadBrandAssets(brandKitDir: string, brief: BriefArtifact): BrandAssets {
-  const kitDir = path.join(brandKitDir, brief.brand.slug);
+export function loadBrandAssets(kitDir: string, brief: BriefArtifact): BrandAssets {
   return {
     logo: readOptional(path.join(kitDir, 'logo.png')),
     products: new Map(brief.products.map((p) => [p.name, readOptional(p.imageFile ? path.join(kitDir, 'products', p.imageFile) : null)])),
@@ -210,8 +209,8 @@ export const createStage: StageDefinition = {
     const analysis = ctx.store.readJson('analysis', 'analysis.json', BrandAnalysisSchema);
     const plan = ctx.store.readJson('plan', 'plan.json', ContentPlanSchema);
 
-    const assets = loadBrandAssets(ctx.brandKitDir, brief);
-    if (!assets.logo) ctx.log(`warning: no logo in ${brief.brand.slug}/logo.png — slides are composed without a logo`);
+    const assets = loadBrandAssets(ctx.kitDir, brief);
+    if (!assets.logo) ctx.log('warning: no logo.png among the run inputs — slides are composed without a logo');
 
     const jobs: SlideJob[] = plan.posts.flatMap((post) => post.slides.map((slide) => ({ post, slide })));
     const prev = previousPrompts(ctx);

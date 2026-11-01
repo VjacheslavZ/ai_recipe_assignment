@@ -11,7 +11,7 @@ export const DEFAULT_CONSTRAINTS = [
 const slugSchema = z
   .string()
   .trim()
-  .regex(/^[a-z0-9][a-z0-9-]*$/, 'must be lowercase letters, digits and dashes (it names the brand_kit folder)');
+  .regex(/^[a-z0-9][a-z0-9-]*$/, 'must be lowercase letters, digits and dashes (it names the run folders)');
 
 const optionalText = z
   .string()
@@ -67,7 +67,7 @@ export const BriefProductSchema = z.object({
   name: z.string().min(1),
   /** Official product page; null when the brief had none or only a TODO placeholder. */
   url: z.url().nullable(),
-  /** File name relative to `brand_kit/<slug>/products/`. */
+  /** File name in the run's `inputs/products/` (ADR-033). */
   imageFile: z.string().nullable(),
   notes: z.string().nullable(),
 });
@@ -93,7 +93,7 @@ export const BriefSchema = z.object({
 });
 export type Brief = z.infer<typeof BriefSchema>;
 
-/** Result of checking `brand_kit/<slug>/` (stage 01). */
+/** Result of checking the run's input files, `inputs/` (stage 01). */
 export const BrandKitStatusSchema = z.object({
   dir: z.string(),
   logo: z.string().nullable(),

@@ -25,7 +25,7 @@ export type ImagePickModel = z.infer<typeof ImagePickModelSchema>;
 export const KitItemSchema = z.object({
   kind: z.enum(['logo', 'product']),
   product: z.string().nullable(),
-  /** Path relative to `brand_kit/<slug>/`. */
+  /** Path relative to the kit folder (`logo.png`, `products/…`). */
   file: z.string().nullable(),
   status: z.enum(['collected', 'kept', 'not_found']),
   sourceUrl: z.string().nullable(),
@@ -34,7 +34,7 @@ export const KitItemSchema = z.object({
 });
 export type KitItem = z.infer<typeof KitItemSchema>;
 
-/** `brand_kit/<slug>/sources.json`: where each collected file came from (R34). */
+/** `sources.json` in the kit folder: where each collected file came from (R34). */
 export const KitSourceSchema = z.object({
   file: z.string(),
   sourceUrl: z.string(),

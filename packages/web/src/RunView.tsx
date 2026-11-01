@@ -15,6 +15,49 @@ const TAB_STAGE: Partial<Record<Tab, Stage>> = { Posts: 'create', Analysis: 'ana
 
 const stageFile = (stage: Stage, file: string) => `${String(STAGES.indexOf(stage) + 1).padStart(2, '0')}_${stage}/${file}`;
 
+/** The files the run was made from, as small previews (they live in the run's inputs folder). */
+function RunInputs({ inputs }: { inputs: NonNullable<RunDetail['inputs']> }) {
+  const groups = [
+    { label: 'Logo', files: inputs.logo ? [inputs.logo] : [] },
+    { label: 'Product photos', files: inputs.products },
+    { label: 'Instagram screenshots', files: inputs.instagram },
+  ];
+  return (
+    <section aria-labelledby="inputs-title" className="mt-6">
+      <h2 id="inputs-title" className="text-sm font-semibold">
+        Files used by this run
+      </h2>
+      <div className="mt-2 flex flex-wrap gap-x-8 gap-y-3">
+        {groups.map((g) => (
+          <div key={g.label}>
+            <p className="text-xs text-ink-soft">
+              {g.label}
+              {g.files.length > 1 && ` (${g.files.length})`}
+            </p>
+            {g.files.length ? (
+              <ul className="mt-1 flex flex-wrap gap-1.5">
+                {g.files.map((rel) => (
+                  <li key={rel}>
+                    <a href={`${inputs.base}/${rel}`} target="_blank" rel="noreferrer" title={rel}>
+                      <img
+                        src={`${inputs.base}/${rel}`}
+                        alt={rel}
+                        className="h-12 w-12 rounded border border-rule bg-[repeating-conic-gradient(#e5e5e5_0_25%,#fff_0_50%)] bg-[length:10px_10px] object-contain"
+                      />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-ink-faint">none</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function RunView({ runId, onChanged }: { runId: string; onChanged: () => void }) {
   const live = useRunEvents(runId);
   const [run, setRun] = useState<RunDetail | null>(null);
@@ -94,6 +137,8 @@ export function RunView({ runId, onChanged }: { runId: string; onChanged: () => 
       )}
 
       <StageStrip stages={stages} active={active} waiting={live.questions.length > 0} onRerun={rerun} />
+
+      {run.inputs && <RunInputs inputs={run.inputs} />}
 
       {error && (
         <p role="alert" className="mt-4 whitespace-pre-wrap rounded-md border-l-4 border-pencil bg-paper px-4 py-3 text-sm text-pencil">

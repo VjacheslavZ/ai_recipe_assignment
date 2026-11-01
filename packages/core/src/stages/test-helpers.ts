@@ -48,7 +48,7 @@ export function tempDir(prefix: string): string {
 
 export function makeContext(opts: {
   ai: AiClient;
-  brandKitDir: string;
+  kitDir: string;
   ask?: (q: PendingQuestion) => Promise<string | null>;
 }): StageContext & { logs: string[]; questions: PendingQuestion[] } {
   const runsDir = tempDir('runs');
@@ -61,7 +61,7 @@ export function makeContext(opts: {
     config: parseConfig({ AI_PROVIDER: 'mock' }, runsDir),
     ai: opts.ai,
     store,
-    brandKitDir: opts.brandKitDir,
+    kitDir: opts.kitDir,
     log: (m) => logs.push(m),
     ask: async (q) => {
       questions.push(q);
@@ -78,8 +78,7 @@ export function makeContext(opts: {
  */
 export async function prepareRunThroughPlan(ai: AiClient) {
   const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), FIXTURE_BRIEF), 'utf8'));
-  const brandKitDir = tempDir('kit');
-  const kit = path.join(brandKitDir, brief.brand.slug);
+  const kit = tempDir('kit');
   mkdirSync(path.join(kit, 'products'), { recursive: true });
   const white = (w: number, h: number) => sharp({ create: { width: w, height: h, channels: 3, background: '#ffffff' } });
   writeFileSync(path.join(kit, 'logo.png'), await white(300, 100).png().toBuffer());
@@ -87,8 +86,8 @@ export async function prepareRunThroughPlan(ai: AiClient) {
   const tub = await sharp({ create: { width: 200, height: 300, channels: 3, background: '#111' } }).png().toBuffer();
   writeFileSync(path.join(kit, 'products', withImage.imageFile!), await white(400, 500).composite([{ input: tub, left: 100, top: 100 }]).png().toBuffer());
 
-  const ctx = makeContext({ ai, brandKitDir });
-  ctx.store.writeJson('brief', 'brief.json', { ...brief, brandKit: checkBrandKit(brandKitDir, brief), warnings: [] });
+  const ctx = makeContext({ ai, kitDir: kit });
+  ctx.store.writeJson('brief', 'brief.json', { ...brief, brandKit: checkBrandKit(kit, brief), warnings: [] });
   const analysis = mergeAnalysis({ brief, site: siteFixture, siteSources: siteFixtureSources, instagram: instagramFixture, screenshots: ['01.png', '02.png'], now: '2026-10-30T12:00:00.000Z' });
   ctx.store.writeJson('analysis', 'analysis.json', analysis);
   const { plan } = validatePlan(structuredClone(planFixture) as ContentPlanModel, analysis);

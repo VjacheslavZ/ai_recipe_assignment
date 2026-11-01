@@ -1,4 +1,4 @@
-import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import multipart from '@fastify/multipart';
 import {
@@ -14,6 +14,7 @@ import {
   mockFixtures,
   parseBriefYaml,
   ReviewSchema,
+  RUN_INPUTS_DIR,
   RunStore,
   STAGES,
   type AiCallRecord,
@@ -25,6 +26,7 @@ import {
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { desc, eq } from 'drizzle-orm';
 import { aiCalls, runs, type Db } from './db.js';
+import { copyDir, IMAGE_EXT, KIT_FIELDS, KitStore, listKit, type KitField } from './kits.js';
 import type { PendingQuestions, RunEvent, RunEvents } from './events.js';
 import { enqueueRun, type JobWorker } from './worker.js';
 
@@ -58,26 +60,8 @@ const STAGE_ARTIFACT: Record<Stage, string> = {
   review: 'review.json',
 };
 
-const IMAGE_EXT = /\.(png|jpe?g|webp)$/i;
-
-/** Keeps only the file name and a safe character set (uploads land inside the run folder). */
-function safeName(name: string): string {
-  return path.basename(name).replace(/[^\w.-]+/g, '_');
-}
-
-/**
- * Copies a folder file by file. fs.cpSync fails with EACCES when the target is a Docker Desktop
- * bind mount (runs/ in compose.yaml), while plain copyFileSync works there.
- */
-function copyDir(from: string, to: string): void {
-  mkdirSync(to, { recursive: true });
-  for (const entry of readdirSync(from, { withFileTypes: true })) {
-    const src = path.join(from, entry.name);
-    const dest = path.join(to, entry.name);
-    if (entry.isDirectory()) copyDir(src, dest);
-    else if (entry.isFile()) copyFileSync(src, dest);
-  }
-}
+/** Files of the demo run, loaded by "Load the GymBeam example". */
+const EXAMPLE_DIR = 'examples/gymbeamhr';
 
 function sendFile(reply: FastifyReply, file: string) {
   reply.header('content-type', MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream');
@@ -98,6 +82,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   const findRun = (id: string) => db.select().from(runs).where(eq(runs.id, id)).get();
+  // Input files of runs being prepared (ADR-033); next to the database, outside the repo's tracked files.
+  const kits = new KitStore(path.join(path.dirname(config.DATABASE_PATH), 'kits'));
+  kits.cleanup(2 * 24 * 60 * 60 * 1000);
   const openStore = (id: string) => RunStore.open(config.RUNS_DIR, id);
 
   app.get('/api/health', async () => ({ ok: true, provider: config.AI_PROVIDER, openaiKeySet: Boolean(config.OPENAI_API_KEY) }));
@@ -122,30 +109,83 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const drafts = new Map<string, { text: string; calls: AiCallRecord[] }>();
   const keyMissing = () => config.AI_PROVIDER === 'openai' && !config.OPENAI_API_KEY;
   const KEY_MISSING = 'OPENAI_API_KEY is not set. Add it to .env and run: docker compose restart server';
-  const kitStatus = (brief: Brief | null) => (brief ? checkBrandKit(config.BRAND_KIT_DIR, brief) : null);
+  // Without a kit (API calls, tests) the brief is checked against an empty folder.
+  const kitDirOf = (kitId: string | undefined) => kits.dir(kitId) ?? path.join(config.RUNS_DIR, '_no_inputs');
+  const kitStatus = (brief: Brief | null, kitId: string | undefined) => (brief ? checkBrandKit(kitDirOf(kitId), brief) : null);
+  const NO_KIT = 'unknown kitId: reload the Start a run page';
+
+  /** A new, empty set of input files for the Start a run page. */
+  app.post('/api/kits', async () => {
+    const kitId = kits.create();
+    return { kitId, files: listKit(kits.dir(kitId)!) };
+  });
+
+  app.get<{ Params: { kitId: string } }>('/api/kits/:kitId', async (req, reply) => {
+    const dir = kits.dir(req.params.kitId);
+    return dir ? listKit(dir) : reply.code(404).send({ error: NO_KIT });
+  });
+
+  /** Upload files: multipart fields `logo`, `products`, `screenshots`. Returns the kit's files. */
+  app.post<{ Params: { kitId: string } }>('/api/kits/:kitId/files', async (req, reply) => {
+    const dir = kits.dir(req.params.kitId);
+    if (!dir) return reply.code(404).send({ error: NO_KIT });
+    if (!req.isMultipart()) return reply.code(400).send({ error: 'send the files as multipart/form-data' });
+    for await (const part of req.parts()) {
+      if (part.type !== 'file') continue;
+      if (!KIT_FIELDS.includes(part.fieldname as KitField)) return reply.code(400).send({ error: `unexpected file field "${part.fieldname}"` });
+      if (!IMAGE_EXT.test(part.filename)) return reply.code(400).send({ error: `"${part.filename}" is not a PNG/JPEG/WebP image` });
+      kits.add(dir, part.fieldname as KitField, part.filename, await part.toBuffer());
+    }
+    return listKit(dir);
+  });
+
+  app.get<{ Params: { kitId: string; '*': string } }>('/api/kits/:kitId/files/*', async (req, reply) => {
+    const dir = kits.dir(req.params.kitId);
+    const file = dir && kits.file(dir, req.params['*']);
+    if (!file) return reply.code(404).send({ error: 'not found' });
+    reply.header('cache-control', 'no-store');
+    return sendFile(reply, file);
+  });
+
+  app.delete<{ Params: { kitId: string; '*': string } }>('/api/kits/:kitId/files/*', async (req, reply) => {
+    const dir = kits.dir(req.params.kitId);
+    if (!dir || !kits.remove(dir, req.params['*'])) return reply.code(404).send({ error: 'not found' });
+    return listKit(dir);
+  });
+
+  /** Puts the demo run's files (examples/gymbeamhr) into the kit. */
+  app.post<{ Params: { kitId: string } }>('/api/kits/:kitId/example', async (req, reply) => {
+    const dir = kits.dir(req.params.kitId);
+    if (!dir) return reply.code(404).send({ error: NO_KIT });
+    copyDir(path.join(config.rootDir, EXAMPLE_DIR), dir);
+    rmSync(path.join(dir, 'README.md'), { force: true });
+    return listKit(dir);
+  });
 
   /** Free text → brief for the person to check (one cheap text-model call). */
   app.post('/api/brief/draft', async (req, reply) => {
-    const body = (req.body ?? {}) as { text?: string; productFiles?: string[] };
+    const body = (req.body ?? {}) as { text?: string; kitId?: string };
     if (!body.text?.trim()) return reply.code(400).send({ error: 'describe the brand and the posts you want' });
     if (keyMissing()) return reply.code(400).send({ error: KEY_MISSING });
     const ai = createAiClient(config, { fixtures: mockFixtures });
-    const draft = await draftBrief(ai, { text: body.text, brandKitDir: config.BRAND_KIT_DIR, uploadedProductFiles: body.productFiles ?? [] });
+    const draft = await draftBrief(ai, { text: body.text, kitDir: kitDirOf(body.kitId) });
     app.log.info({ purpose: draft.call.purpose, model: draft.call.model, costUsd: draft.call.costUsd }, 'brief draft');
     const draftId = draft.call.id;
     drafts.set(draftId, { text: body.text, calls: [draft.call] });
     if (drafts.size > 50) drafts.delete(drafts.keys().next().value!);
-    return { ...draft, draftId, kit: kitStatus(draft.brief) };
+    return { ...draft, draftId, kit: kitStatus(draft.brief, body.kitId) };
   });
 
   /**
-   * Collect the logo and product packshots from the brand's website into brand_kit/<slug>/
-   * (ADR-030) and write the found product pages and photo files into the brief.
+   * Collect the logo and product packshots from the brand's website into the kit (ADR-030)
+   * and write the found product pages and photo files into the brief.
    */
   app.post('/api/brief/collect', async (req, reply) => {
-    const body = (req.body ?? {}) as { yaml?: string; draftId?: string; replace?: boolean };
+    const body = (req.body ?? {}) as { yaml?: string; draftId?: string; kitId?: string; replace?: boolean };
     if (!body.yaml?.trim()) return reply.code(400).send({ error: 'brief YAML is required' });
     if (keyMissing()) return reply.code(400).send({ error: KEY_MISSING });
+    const kitDir = kits.dir(body.kitId);
+    if (!kitDir) return reply.code(400).send({ error: NO_KIT });
     let brief: Brief;
     try {
       brief = parseBriefYaml(body.yaml).brief;
@@ -153,7 +193,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return reply.code(400).send({ error: (err as Error).message });
     }
     const ai = createAiClient(config, { fixtures: mockFixtures });
-    const result = await collectBrandKit(ai, { brief, brandKitDir: config.BRAND_KIT_DIR, replace: body.replace, log: (m) => app.log.info(m) });
+    const result = await collectBrandKit(ai, { brief, kitDir, replace: body.replace, log: (m) => app.log.info(m) });
     if (body.draftId) drafts.get(body.draftId)?.calls.push(...result.calls);
     const yaml = applyCollectedToYaml(body.yaml, result.products);
     const parsed = parseBriefYaml(yaml);
@@ -162,42 +202,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       brief: parsed.brief,
       warnings: parsed.warnings.filter((w) => !w.includes('no valid product page URL')),
       items: result.items,
-      kit: kitStatus(parsed.brief),
+      kit: kitStatus(parsed.brief, body.kitId),
+      files: listKit(kitDir),
       costUsd: result.calls.reduce((sum, c) => sum + (c.costUsd ?? 0), 0),
     };
   });
 
-  /** Brand-kit images for previews on the Start a run page. */
-  app.get<{ Params: { slug: string; '*': string } }>('/api/brand-kit/:slug/*', async (req, reply) => {
-    const root = path.resolve(config.BRAND_KIT_DIR, safeName(req.params.slug));
-    const file = path.resolve(root, req.params['*']);
-    if (!file.startsWith(root + path.sep) || !IMAGE_EXT.test(file) || !existsSync(file)) return reply.code(404).send({ error: 'not found' });
-    reply.header('cache-control', 'no-store');
-    return sendFile(reply, file);
-  });
-
   /**
-   * Create a run. JSON `{ briefYaml }` or multipart: field `brief` (YAML) and files
-   * `logo`, `products` (file names must match `imageFile` in the brief), `screenshots`.
+   * Create a run from `{ briefYaml, draftId?, kitId? }`. The kit's files move into
+   * `<run>/inputs/`, so the run keeps exactly the files it was made from (ADR-033).
    */
   app.post('/api/runs', async (req, reply) => {
-    let briefYaml: string | undefined;
-    let draftId: string | undefined;
-    const uploads: { field: string; filename: string; data: Buffer }[] = [];
-    if (req.isMultipart()) {
-      for await (const part of req.parts()) {
-        if (part.type === 'file') uploads.push({ field: part.fieldname, filename: part.filename, data: await part.toBuffer() });
-        else if (part.fieldname === 'brief') briefYaml = String(part.value);
-        else if (part.fieldname === 'draftId') draftId = String(part.value);
-      }
-    } else {
-      ({ briefYaml, draftId } = (req.body ?? {}) as { briefYaml?: string; draftId?: string });
-    }
-    if (!briefYaml?.trim()) return reply.code(400).send({ error: 'brief YAML is required (field "brief" or JSON "briefYaml")' });
+    const { briefYaml, draftId, kitId } = (req.body ?? {}) as { briefYaml?: string; draftId?: string; kitId?: string };
+    if (!briefYaml?.trim()) return reply.code(400).send({ error: 'brief YAML is required (JSON "briefYaml")' });
     // Fail here, not minutes later in stage 2.
-    if (config.AI_PROVIDER === 'openai' && !config.OPENAI_API_KEY) {
-      return reply.code(400).send({ error: 'OPENAI_API_KEY is not set. Add it to .env and run: docker compose restart server' });
-    }
+    if (keyMissing()) return reply.code(400).send({ error: KEY_MISSING });
 
     let slug: string;
     try {
@@ -206,31 +225,20 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       const message = err instanceof BriefValidationError || err instanceof Error ? err.message : String(err);
       return reply.code(400).send({ error: message });
     }
-    for (const u of uploads) {
-      if (!['logo', 'products', 'screenshots'].includes(u.field)) return reply.code(400).send({ error: `unexpected file field "${u.field}"` });
-      if (!IMAGE_EXT.test(u.filename)) return reply.code(400).send({ error: `"${u.filename}" is not a PNG/JPEG/WebP image` });
-    }
 
     const store = RunStore.create(config.RUNS_DIR, slug, config);
     store.writeText('brief', BRIEF_INPUT_FILE, briefYaml);
-
-    // With uploads the run gets its own brand kit: the repo kit as a base, uploads on top.
-    let brandKitDir = config.BRAND_KIT_DIR;
-    if (uploads.length) {
-      brandKitDir = path.join(store.runDir, 'brand_kit');
-      const kit = path.join(brandKitDir, slug);
-      const repoKit = path.join(config.BRAND_KIT_DIR, slug);
-      if (existsSync(repoKit)) copyDir(repoKit, kit);
-      for (const u of uploads) {
-        const target =
-          u.field === 'logo' ? path.join(kit, 'logo.png') : path.join(kit, u.field === 'products' ? 'products' : 'instagram', safeName(u.filename));
-        mkdirSync(path.dirname(target), { recursive: true });
-        writeFileSync(target, u.data);
-      }
+    const inputsDir = path.join(store.runDir, RUN_INPUTS_DIR);
+    const kitDir = kits.dir(kitId);
+    if (kitDir) {
+      copyDir(kitDir, inputsDir);
+      rmSync(kitDir, { recursive: true, force: true });
+    } else {
+      mkdirSync(inputsDir, { recursive: true });
     }
 
     db.insert(runs)
-      .values({ id: store.runId, brandSlug: slug, status: 'queued', runDir: store.runDir, brandKitDir, provider: config.AI_PROVIDER, createdAt: new Date().toISOString() })
+      .values({ id: store.runId, brandSlug: slug, status: 'queued', runDir: store.runDir, brandKitDir: inputsDir, provider: config.AI_PROVIDER, createdAt: new Date().toISOString() })
       .run();
     // The request the brief was prepared from, and the cost of preparing it, belong to the run.
     const draft = draftId ? drafts.get(draftId) : undefined;
@@ -260,7 +268,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get<{ Params: { id: string } }>('/api/runs/:id', async (req, reply) => {
     const run = findRun(req.params.id);
     if (!run) return reply.code(404).send({ error: 'run not found' });
-    return { ...run, state: openStore(run.id).getState(), questions: questions.list(run.id) };
+    // Input files, when they live in the run folder (all runs since ADR-033), with their URLs.
+    const inputsRel = path.relative(run.runDir, run.brandKitDir);
+    const inputs = inputsRel && !inputsRel.startsWith('..') && existsSync(run.brandKitDir) ? { base: `/api/runs/${run.id}/files/${inputsRel}`, ...listKit(run.brandKitDir) } : null;
+    return { ...run, state: openStore(run.id).getState(), questions: questions.list(run.id), inputs };
   });
 
   app.get<{ Params: { id: string } }>('/api/runs/:id/events', async (req, reply) => {

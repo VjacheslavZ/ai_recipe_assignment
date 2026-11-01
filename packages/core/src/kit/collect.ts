@@ -16,7 +16,8 @@ export const KIT_SOURCES_FILE = 'sources.json';
 
 export interface CollectBrandKitOptions {
   brief: Brief;
-  brandKitDir: string;
+  /** The run's input folder: the logo goes to `logo.png`, packshots to `products/`. */
+  kitDir: string;
   /** Replace files that are already in the brand kit. */
   replace?: boolean;
   /** Injectable for tests. */
@@ -44,7 +45,7 @@ export function productFileName(name: string): string {
 
 /**
  * Collects the logo and product packshots from the brand's official website into
- * `brand_kit/<slug>/` (ADR-030). Code finds candidates; a text model picks product pages
+ * the run's input folder (ADR-030, ADR-033). Code finds candidates; a text model picks product pages
  * from the site search; a vision model checks each image. Nothing is generated: every file
  * is downloaded from the brand's site, and its source is recorded in `sources.json`.
  */
@@ -52,7 +53,7 @@ export async function collectBrandKit(ai: AiClient, opts: CollectBrandKitOptions
   const { brief } = opts;
   const get = opts.fetch ?? fetch;
   const log = opts.log ?? (() => {});
-  const kitDir = path.join(opts.brandKitDir, brief.brand.slug);
+  const { kitDir } = opts;
   const domains = brandDomains(brief);
   const onBrandSite = (url: string) => domains.some((d) => new URL(url).hostname.replace(/^www\./, '').endsWith(d));
   const calls: AiCallRecord[] = [];

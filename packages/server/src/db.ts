@@ -12,6 +12,7 @@ export const runs = sqliteTable('runs', {
   brandSlug: text('brand_slug').notNull(),
   status: text('status', { enum: ['queued', 'running', 'succeeded', 'failed'] }).notNull(),
   runDir: text('run_dir').notNull(),
+  /** The run's input files (`<runDir>/inputs`); older runs point at the shared brand_kit/ folder. */
   brandKitDir: text('brand_kit_dir').notNull(),
   provider: text('provider').notNull(),
   error: text('error'),

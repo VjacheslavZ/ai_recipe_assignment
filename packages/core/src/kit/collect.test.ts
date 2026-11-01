@@ -82,22 +82,22 @@ describe('collectBrandKit', () => {
         'kit.product': { choice: 1, reason: 'front of pack' },
       },
     });
-    const res = await collectBrandKit(ai, { brief, brandKitDir: dir, fetch });
+    const res = await collectBrandKit(ai, { brief, kitDir: dir, fetch });
 
     expect(res.items.map((i) => [i.kind, i.status])).toEqual([
       ['logo', 'collected'],
       ['product', 'collected'],
       ['product', 'not_found'],
     ]);
-    const logo = await sharp(path.join(dir, 'example', 'logo.png')).metadata();
+    const logo = await sharp(path.join(dir, 'logo.png')).metadata();
     expect(logo.width).toBeGreaterThanOrEqual(1100); // SVG rendered large
-    expect(existsSync(path.join(dir, 'example', 'products', productFileName('Example True Whey')))).toBe(true);
+    expect(existsSync(path.join(dir, 'products', productFileName('Example True Whey')))).toBe(true);
     expect(res.products).toEqual([
       { name: 'Example True Whey', url: `${SITE}/protein-wpc-80.html`, imageFile: 'example-true-whey.png' },
       { name: 'Example Mystery Bar', url: null, imageFile: null },
     ]);
     expect(requested).not.toContain(`${SITE}/invented-bar.html`);
-    const sources = JSON.parse(readFileSync(path.join(dir, 'example', 'sources.json'), 'utf8')) as { file: string; sourceUrl: string }[];
+    const sources = JSON.parse(readFileSync(path.join(dir, 'sources.json'), 'utf8')) as { file: string; sourceUrl: string }[];
     expect(sources.map((s) => [s.file, s.sourceUrl])).toEqual([
       ['logo.png', `${SITE}/static/logo.svg`],
       ['products/example-true-whey.png', `${SITE}/media/true-whey.jpg`],
@@ -106,21 +106,21 @@ describe('collectBrandKit', () => {
 
     // A second run checks what is already in the kit and keeps it.
     const known = { ...brief.products[0]!, url: `${SITE}/protein-wpc-80.html`, imageFile: 'example-true-whey.png' };
-    const again = await collectBrandKit(ai, { brief: { ...brief, products: [known] }, brandKitDir: dir, fetch });
+    const again = await collectBrandKit(ai, { brief: { ...brief, products: [known] }, kitDir: dir, fetch });
     expect(again.items.map((i) => i.status)).toEqual(['kept', 'kept']);
     expect(again.calls.map((c) => c.purpose)).toEqual(['kit.product.p1']);
 
     // A product whose photo is already there still gets its page looked up (facts and prices).
-    const pageOnly = await collectBrandKit(ai, { brief: { ...brief, products: [{ ...known, url: null }] }, brandKitDir: dir, fetch });
+    const pageOnly = await collectBrandKit(ai, { brief: { ...brief, products: [{ ...known, url: null }] }, kitDir: dir, fetch });
     expect(pageOnly.products[0]).toMatchObject({ url: `${SITE}/protein-wpc-80.html`, imageFile: 'example-true-whey.png' });
     expect(pageOnly.items[1]).toMatchObject({ status: 'kept', pageUrl: `${SITE}/protein-wpc-80.html` });
   });
 
   it('replaces a kit photo that the vision check says is a different product, keeping the file', async () => {
     const dir = mkdtempSync(path.join(tmpdir(), 'recipe-kit-'));
-    mkdirSync(path.join(dir, 'example', 'products'), { recursive: true });
-    await sharp({ create: { width: 300, height: 300, channels: 3, background: '#00ff00' } }).png().toFile(path.join(dir, 'example', 'products', 'whey.png'));
-    await sharp({ create: { width: 300, height: 100, channels: 3, background: '#000000' } }).png().toFile(path.join(dir, 'example', 'logo.png'));
+    mkdirSync(path.join(dir, 'products'), { recursive: true });
+    await sharp({ create: { width: 300, height: 300, channels: 3, background: '#00ff00' } }).png().toFile(path.join(dir, 'products', 'whey.png'));
+    await sharp({ create: { width: 300, height: 100, channels: 3, background: '#000000' } }).png().toFile(path.join(dir, 'logo.png'));
     const { fetch } = await site();
     const mock = createMockClient(config, { delayMs: 0, fixtures: { 'kit.product': { choice: 1, reason: 'front of pack' } } });
     let checks = 0;
@@ -133,11 +133,11 @@ describe('collectBrandKit', () => {
       },
     };
     const product = { ...brief.products[0]!, url: `${SITE}/protein-wpc-80.html`, imageFile: 'whey.png' };
-    const res = await collectBrandKit(ai, { brief: { ...brief, products: [product] }, brandKitDir: dir, fetch });
+    const res = await collectBrandKit(ai, { brief: { ...brief, products: [product] }, kitDir: dir, fetch });
     expect(res.products[0]?.imageFile).toBe('example-true-whey.png');
     expect(res.items[1]).toMatchObject({ status: 'collected' });
     expect(res.items[1]?.note).toMatch(/Your photo whey\.png looks like a different product \(this is Just Whey\)/);
-    expect(existsSync(path.join(dir, 'example', 'products', 'whey.png'))).toBe(true);
+    expect(existsSync(path.join(dir, 'products', 'whey.png'))).toBe(true);
   });
 
   it('writes found pages and photos into the brief YAML', () => {

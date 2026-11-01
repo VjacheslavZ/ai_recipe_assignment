@@ -23,27 +23,30 @@ function listFiles(dir: string, pattern: RegExp): string[] {
     .sort();
 }
 
-/** Lists Instagram screenshots in `brand_kit/<slug>/instagram/` (sorted, images only). */
-export function listInstagramScreenshots(brandKitDir: string, slug: string): string[] {
-  return listFiles(path.join(brandKitDir, slug, 'instagram'), IMAGE_EXT);
+/** Lists Instagram screenshots in `<kit>/instagram/` (sorted, images only). */
+export function listInstagramScreenshots(kitDir: string): string[] {
+  return listFiles(path.join(kitDir, 'instagram'), IMAGE_EXT);
 }
 
-/** Checks which brand-kit files exist. Missing files are reported, never fatal. */
-export function checkBrandKit(brandKitDir: string, brief: Brief): BrandKitStatus {
-  const dir = path.join(brandKitDir, brief.brand.slug);
+/**
+ * Checks which input files of a run exist in its kit folder (`logo.png`, `products/`,
+ * `instagram/`; uploaded for each run, ADR-033). Missing files are reported, never fatal.
+ */
+export function checkBrandKit(kitDir: string, brief: Brief): BrandKitStatus {
+  const dir = kitDir;
   const missing: string[] = [];
 
   const logo = existsSync(path.join(dir, 'logo.png')) ? 'logo.png' : null;
-  if (!logo) missing.push(`${brief.brand.slug}/logo.png`);
+  if (!logo) missing.push('logo.png');
 
   const products = brief.products.map((p) => {
     const exists = p.imageFile ? existsSync(path.join(dir, 'products', p.imageFile)) : false;
-    if (!exists) missing.push(`${brief.brand.slug}/products/${p.imageFile ?? `<image for "${p.name}">`}`);
+    if (!exists) missing.push(`products/${p.imageFile ?? `<image for "${p.name}">`}`);
     return { name: p.name, imageFile: p.imageFile, exists };
   });
 
-  const instagramScreenshots = listInstagramScreenshots(brandKitDir, brief.brand.slug);
-  if (!instagramScreenshots.length) missing.push(`${brief.brand.slug}/instagram/*.png (screenshots)`);
+  const instagramScreenshots = listInstagramScreenshots(dir);
+  if (!instagramScreenshots.length) missing.push('instagram/*.png (screenshots)');
 
   return { dir, logo, products, instagramScreenshots, fonts: listFiles(path.join(dir, 'fonts'), FONT_EXT), missing };
 }
@@ -68,7 +71,7 @@ export const briefStage: StageDefinition = {
     if (!existsSync(inputPath)) throw new Error(`Brief input not found: ${inputPath}`);
 
     const { brief, warnings } = parseBriefYaml(readFileSync(inputPath, 'utf8'));
-    const brandKit = checkBrandKit(ctx.brandKitDir, brief);
+    const brandKit = checkBrandKit(ctx.kitDir, brief);
     const allWarnings = [...warnings, ...brandKit.missing.map((m) => `brand kit: missing ${m}`)];
     for (const w of allWarnings) ctx.log(`warning: ${w}`);
 

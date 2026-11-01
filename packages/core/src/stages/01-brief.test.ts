@@ -90,13 +90,13 @@ describe('checkBrandKit', () => {
     expect(kit.logo).toBeNull();
     expect(kit.instagramScreenshots).toEqual([]);
     expect(kit.products.every((p) => !p.exists)).toBe(true);
-    expect(kit.missing).toContain('gymbeamhr/logo.png');
+    expect(kit.missing).toContain('logo.png');
   });
 
   it('finds existing logo, product images and screenshots', () => {
     const { brief } = parseBriefYaml(readFileSync(EXAMPLE, 'utf8'));
     const kitDir = tempDir('kit');
-    const dir = path.join(kitDir, 'gymbeamhr');
+    const dir = kitDir;
     mkdirSync(path.join(dir, 'instagram'), { recursive: true });
     mkdirSync(path.join(dir, 'products'), { recursive: true });
     writeFileSync(path.join(dir, 'logo.png'), '');
@@ -111,7 +111,7 @@ describe('checkBrandKit', () => {
 
 describe('briefStage', () => {
   it('writes brief.json and brief.md from brief.input.yaml', async () => {
-    const ctx = makeContext({ ai: fakeAi({}), brandKitDir: tempDir('kit') });
+    const ctx = makeContext({ ai: fakeAi({}), kitDir: tempDir('kit') });
     copyFileSync(EXAMPLE, ctx.store.path('brief', 'brief.input.yaml'));
     await briefStage.run(ctx);
     const artifact = ctx.store.readJson('brief', 'brief.json', BriefArtifactSchema);

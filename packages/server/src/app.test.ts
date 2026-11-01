@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { findRepoRoot, parseConfig } from '@recipe/core';
@@ -15,7 +15,7 @@ afterEach(() => closers.splice(0).forEach((c) => c()));
 
 async function setup(questionTimeoutMs = 20, env: Record<string, string> = { AI_PROVIDER: 'mock' }) {
   const tmp = mkdtempSync(path.join(tmpdir(), 'recipe-server-'));
-  const config = parseConfig({ ...env, RUNS_DIR: path.join(tmp, 'runs'), BRAND_KIT_DIR: path.join(tmp, 'kit') }, root);
+  const config = parseConfig({ ...env, RUNS_DIR: path.join(tmp, 'runs'), DATABASE_PATH: path.join(tmp, 'data', 'recipe.db') }, root);
   const { db, close } = openDb(':memory:');
   closers.push(close);
   const events = new RunEvents();
@@ -55,6 +55,50 @@ describe('server', () => {
     expect((await app.inject(`/api/runs/${runId}/files/01_brief/request.txt`)).body).toBe('Posts for GymBeam');
     const costs = (await app.inject(`/api/runs/${runId}/costs`)).json<{ totals: { calls: number } }>();
     expect(costs.totals.calls).toBe(1);
+  });
+
+  it('keeps uploaded input files per page, previews them and moves them into the run', async () => {
+    const { app, config } = await setup();
+    const { kitId } = (await app.inject({ method: 'POST', url: '/api/kits' })).json<{ kitId: string }>();
+    // 1×1 PNG.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+    const form = new FormData();
+    form.append('logo', new Blob([png], { type: 'image/png' }), 'my logo.png');
+    form.append('products', new Blob([png], { type: 'image/png' }), 'gymbeam-true-whey-protein.png');
+    form.append('screenshots', new Blob([png], { type: 'image/png' }), '01.png');
+    form.append('screenshots', new Blob([png], { type: 'image/png' }), '02.png');
+    const body = new Response(form);
+    const uploaded = await app.inject({
+      method: 'POST',
+      url: `/api/kits/${kitId}/files`,
+      headers: { 'content-type': body.headers.get('content-type')! },
+      payload: Buffer.from(await body.arrayBuffer()),
+    });
+    expect(uploaded.json()).toEqual({ logo: 'logo.png', products: ['products/gymbeam-true-whey-protein.png'], instagram: ['instagram/01.png', 'instagram/02.png'] });
+    expect((await app.inject(`/api/kits/${kitId}/files/products/gymbeam-true-whey-protein.png`)).headers['content-type']).toBe('image/png');
+    expect((await app.inject(`/api/kits/${kitId}/files/..%2F..%2Frecipe.db`)).statusCode).toBe(404);
+    expect((await app.inject({ method: 'DELETE', url: `/api/kits/${kitId}/files/instagram/02.png` })).json<{ instagram: string[] }>().instagram).toEqual(['instagram/01.png']);
+
+    // The brief card sees the files of this page only.
+    const draft = (await app.inject({ method: 'POST', url: '/api/brief/draft', payload: { text: 'Posts for GymBeam', kitId } })).json<{ draftId: string; kit: { logo: string | null } }>();
+    expect(draft.kit.logo).toBe('logo.png');
+
+    const { runId } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml, draftId: draft.draftId, kitId } })).json<{ runId: string }>();
+    const run = (await app.inject(`/api/runs/${runId}`)).json<{ inputs: { base: string; logo: string; instagram: string[] } }>();
+    expect(run.inputs).toMatchObject({ logo: 'logo.png', instagram: ['instagram/01.png'] });
+    expect((await app.inject(`${run.inputs.base}/logo.png`)).statusCode).toBe(200);
+    // The page's kit is gone once the run has its own copy.
+    expect((await app.inject(`/api/kits/${kitId}`)).statusCode).toBe(404);
+    expect(existsSync(path.join(config.RUNS_DIR, runId, 'inputs', 'products', 'gymbeam-true-whey-protein.png'))).toBe(true);
+  });
+
+  it('loads the demo files into a kit', async () => {
+    const { app } = await setup();
+    const { kitId } = (await app.inject({ method: 'POST', url: '/api/kits' })).json<{ kitId: string }>();
+    const files = (await app.inject({ method: 'POST', url: `/api/kits/${kitId}/example` })).json<{ logo: string | null; products: string[]; instagram: string[] }>();
+    expect(files.logo).toBe('logo.png');
+    expect(files.products.length).toBeGreaterThan(0);
+    expect(files.instagram.length).toBeGreaterThan(0);
   });
 
   it('creates a run, processes the queued job end to end and serves posts, files, costs and the zip', async () => {

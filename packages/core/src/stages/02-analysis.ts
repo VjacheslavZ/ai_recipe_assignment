@@ -288,10 +288,10 @@ export const analysisStage: StageDefinition = {
       model: 'text',
     });
 
-    const screenshots = listInstagramScreenshots(ctx.brandKitDir, brief.brand.slug).slice(0, MAX_SCREENSHOTS);
+    const screenshots = listInstagramScreenshots(ctx.kitDir).slice(0, MAX_SCREENSHOTS);
     let instagram: { data: InstagramAnalysisModel; sources: Source[] } | null = null;
     if (screenshots.length) {
-      const igDir = path.join(ctx.brandKitDir, brief.brand.slug, 'instagram');
+      const igDir = path.join(ctx.kitDir, 'instagram');
       const images = screenshots.map((f) => path.join(igDir, f));
       const igPrompt = buildAnalysisInstagramPrompt({ brief, screenshotFiles: screenshots });
       prompts.push({ purpose: 'analysis.instagram', version: ANALYSIS_INSTAGRAM_PROMPT_VERSION, ...igPrompt, images: screenshots });

@@ -46,10 +46,10 @@ export function checkCaptionPrices(text: string, analysis: BrandAnalysis): strin
   return issues;
 }
 
-function productReference(brandKitDir: string, brief: BriefArtifact, productName: string | null, assets: BrandAssets): string | null {
+function productReference(kitDir: string, brief: BriefArtifact, productName: string | null, assets: BrandAssets): string | null {
   if (!productName || !assets.products.get(productName)) return null;
   const file = brief.products.find((p) => p.name === productName)?.imageFile;
-  return file ? path.join(brandKitDir, brief.brand.slug, 'products', file) : null;
+  return file ? path.join(kitDir, 'products', file) : null;
 }
 
 async function reviewSlide(
@@ -89,7 +89,7 @@ export const reviewStage: StageDefinition = {
     const captions = ctx.store.readJson<CaptionRecord[]>('create', 'captions.json');
     const prompts = new Map(ctx.store.readJson<ImagePromptRecord[]>('create', 'image_prompts.json').map((r) => [`${r.post}/${r.slide}`, r]));
     const specs = ctx.store.readJson<ComposeSpec[]>('create', 'compose_specs.json');
-    const assets = loadBrandAssets(ctx.brandKitDir, brief);
+    const assets = loadBrandAssets(ctx.kitDir, brief);
     const threshold = ctx.config.QA_SCORE_THRESHOLD;
     const maxRegen = ctx.config.MAX_REGENERATIONS;
     ctx.store.writeJson('review', 'prompts.json', { version: REVIEW_PROMPT_VERSION, note: 'Per-slide and per-caption prompts are built by prompts/review.ts from plan.json and analysis.json.' });
@@ -100,7 +100,7 @@ export const reviewStage: StageDefinition = {
       for (const slide of post.slides) {
         const job = { post, slide };
         const key = `${post.number}/${slide.index}`;
-        const reference = productReference(ctx.brandKitDir, brief, slide.productName, assets);
+        const reference = productReference(ctx.kitDir, brief, slide.productName, assets);
         const firstFile = `${postDir(post.number)}/slide_${slide.index}.png`;
         const attempts: SlideAttempt[] = [];
         const pngs: Buffer[] = [];

@@ -5,7 +5,7 @@ export type { Config, Env } from './config.js';
 export * from './ai/index.js';
 export { STAGES } from './pipeline/types.js';
 export type { Stage, StageStatus, PendingQuestion, StageContext, StageDefinition } from './pipeline/types.js';
-export { runPipeline } from './pipeline/runner.js';
+export { RUN_INPUTS_DIR, runPipeline } from './pipeline/runner.js';
 export type { RunPipelineOptions, RunPipelineResult } from './pipeline/runner.js';
 export { RunStore, stageDirName, slugify } from './run/store.js';
 export type { RunState, StageState, StoredAiCall, CostBucket, CostReport } from './run/store.js';
