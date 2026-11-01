@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { findRepoRoot } from '../config.js';
 import { FIXTURE_BRIEF } from '../fixtures/index.js';
-import { BriefArtifactSchema, BriefValidationError, DEFAULT_CONSTRAINTS, brandDomains } from '../schemas/brief.js';
+import { BriefArtifactSchema, BriefValidationError, DEFAULT_CONSTRAINTS, brandDomains, runTitle } from '../schemas/brief.js';
 import { briefStage, checkBrandKit, parseBriefYaml } from './01-brief.js';
 import { fakeAi, makeContext, tempDir } from './test-helpers.js';
 
@@ -80,6 +80,16 @@ goals: []
   it('rejects an invalid website and broken YAML', () => {
     expect(() => parseBriefYaml(MINIMAL.replace('https://test.example.hr', 'test.example.hr'))).toThrow(/brand\.website/);
     expect(() => parseBriefYaml('brand: [unclosed')).toThrow(/YAML syntax/);
+  });
+});
+
+describe('runTitle', () => {
+  it('uses the brief title, or names the products when there is none', () => {
+    const { brief } = parseBriefYaml(readFileSync(EXAMPLE, 'utf8'));
+    expect(brief.title).toBeNull();
+    expect(runTitle(brief)).toBe('True Whey Protein + Creatine Monohydrate + Protein Bar');
+    expect(runTitle({ ...brief, title: ' Halloween LOCK IN night ' })).toBe('Halloween LOCK IN night');
+    expect(runTitle({ title: null, products: [{ ...brief.products[0]!, name: 'x'.repeat(80) }] })).toHaveLength(58);
   });
 });
 

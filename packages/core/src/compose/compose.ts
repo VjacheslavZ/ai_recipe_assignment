@@ -1,4 +1,5 @@
 import sharp, { type OverlayOptions } from 'sharp';
+import { stripEmoji } from '../text.js';
 import type { PostFormat, SlideLayout } from '../schemas/plan.js';
 
 export interface Canvas {
@@ -339,8 +340,23 @@ function svg(width: number, height: number, body: string): Buffer {
   return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">${body}</svg>`);
 }
 
+/** Mean luminance (0–1) of an area of an image. */
+async function luminanceOf(image: Buffer, box: Box): Promise<number> {
+  const { channels } = await sharp(image).extract(box).stats();
+  return (0.2126 * channels[0]!.mean + 0.7152 * channels[1]!.mean + 0.0722 * channels[2]!.mean) / 255;
+}
+
+/**
+ * How much to darken behind the text: just enough to bring the area to SCRIM_TARGET, so a
+ * dark scene is left almost as it is and a bright one is not turned grey and hazy.
+ */
+export function scrimStrength(luminance: number): number {
+  return Math.min(0.62, Math.max(0.15, 1 - SCRIM_TARGET / Math.max(luminance, 0.01)));
+}
+const SCRIM_TARGET = 0.45;
+
 /** Darkens the text side of the background so white type stays readable on any generated scene. */
-function scrim(canvas: Canvas, text: Box): Buffer {
+function scrim(canvas: Canvas, text: Box, strength: number): Buffer {
   const { width: w, height: h } = canvas;
   const cy = (text.top + text.height / 2) / h;
   const cx = (text.left + text.width / 2) / w;
@@ -348,7 +364,7 @@ function scrim(canvas: Canvas, text: Box): Buffer {
     w,
     h,
     `<defs><radialGradient id="g" cx="${cx}" cy="${cy}" r="0.75">` +
-      `<stop offset="0" stop-color="#000" stop-opacity="0.62"/><stop offset="1" stop-color="#000" stop-opacity="0.18"/>` +
+      `<stop offset="0" stop-color="#000" stop-opacity="${strength.toFixed(2)}"/><stop offset="1" stop-color="#000" stop-opacity="${(strength * 0.3).toFixed(2)}"/>` +
       `</radialGradient></defs><rect width="100%" height="100%" fill="url(#g)"/>`,
   );
 }
@@ -421,9 +437,13 @@ export async function composeSlide(input: ComposeInput): Promise<ComposeResult> 
   const { canvas } = input;
   const layout = layoutBoxes(canvas, input.layout);
   const accent = pickAccent(input.colorsHex);
-  const backdrop = await sharp(input.background)
+  const resized = await sharp(input.background)
     .resize(canvas.width, canvas.height, { fit: 'cover', position: input.productInScene ? 'centre' : 'attention' })
-    .composite([{ input: scrim(canvas, layout.text), left: 0, top: 0 }])
+    .png()
+    .toBuffer();
+  const strength = scrimStrength(await luminanceOf(resized, layout.text));
+  const backdrop = await sharp(resized)
+    .composite([{ input: scrim(canvas, layout.text, strength), left: 0, top: 0 }])
     .png()
     .toBuffer();
   const layers: OverlayOptions[] = [];
@@ -441,8 +461,9 @@ export async function composeSlide(input: ComposeInput): Promise<ComposeResult> 
     }
   }
 
-  const headline = `<span foreground="#FFFFFF" weight="heavy">${escapeMarkup(input.headline.toUpperCase())}</span>`;
-  const sub = input.subtext ? `\n<span foreground="#FFFFFF" weight="normal" size="60%">${escapeMarkup(input.subtext)}</span>` : '';
+  const headline = `<span foreground="#FFFFFF" weight="heavy">${escapeMarkup(stripEmoji(input.headline).toUpperCase())}</span>`;
+  const subtext = input.subtext ? stripEmoji(input.subtext) : '';
+  const sub = subtext ? `\n<span foreground="#FFFFFF" weight="normal" size="60%">${escapeMarkup(subtext)}</span>` : '';
   const text = await renderText({
     markup: headline + sub,
     font: input.font,
@@ -457,9 +478,7 @@ export async function composeSlide(input: ComposeInput): Promise<ComposeResult> 
   placed.push({ element: 'text', box: { left: textLeft, top: layout.text.top, width: text.width, height: text.height } });
 
   if (input.logo) {
-    const { channels } = await sharp(backdrop).extract(layout.logo).stats();
-    const luminance = (0.2126 * channels[0]!.mean + 0.7152 * channels[1]!.mean + 0.0722 * channels[2]!.mean) / 255;
-    const fit = await fitInto(await prepareLogo(input.logo, luminance), layout.logo);
+    const fit = await fitInto(await prepareLogo(input.logo, await luminanceOf(backdrop, layout.logo)), layout.logo);
     // Left-align the logo inside its box instead of centring it.
     layers.push({ input: fit.png, left: layout.logo.left, top: fit.top });
     placed.push({ element: 'logo', box: { left: layout.logo.left, top: fit.top, width: fit.width, height: fit.height } });

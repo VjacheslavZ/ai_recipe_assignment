@@ -57,6 +57,24 @@ describe('validatePlan', () => {
     expect(validatePlan(plan(), omitted).plan.posts[2]!.slides[1]!.showPrice).toBe(false);
   });
 
+  it('removes emoji from slide text and reports it', () => {
+    const p = plan();
+    p.posts[1]!.slides[0]!.headline = 'Pick your vibe 🍓';
+    p.posts[1]!.slides[0]!.subtext = '💗';
+    const { plan: out, fixes } = validatePlan(p, analysis);
+    expect(out.posts[1]!.slides[0]).toMatchObject({ headline: 'Pick your vibe', subtext: null });
+    expect(fixes.some((f) => f.includes('emoji removed'))).toBe(true);
+  });
+
+  it('rejects a post without a product slide', () => {
+    const p = plan();
+    for (const s of p.posts[1]!.slides) {
+      s.productName = null;
+      s.layout = 'text-only';
+    }
+    expect(() => validatePlan(p, analysis)).toThrow(/post 2: no slide shows a product/);
+  });
+
   it('rejects unknown products', () => {
     const p = plan();
     p.posts[1]!.slides[0]!.productName = 'GymBeam Magic Pills';

@@ -2,7 +2,7 @@ import type { BrandAnalysis, Fact } from '../schemas/analysis.js';
 import type { Brief } from '../schemas/brief.js';
 import { bullets, sections, type BuiltPrompt } from './shared.js';
 
-export const PLAN_PROMPT_VERSION = 'plan@4';
+export const PLAN_PROMPT_VERSION = 'plan@5';
 
 export interface PlanPromptInput {
   brief: Brief;
@@ -36,9 +36,10 @@ ${bullets([
   'No invented properties, health promises, discounts, prices or quotes. If no verified fact supports a claim, do not make it; write benefit-neutral, inviting copy instead.',
   'Prices: set "showPrice": true only for products whose price is marked "price may be shown". Never write a price amount in headlines or captions — the designer renders it from verified data.',
   '"productName" must be exactly one of the product names listed in the input, or null for a slide without a product. Use layout "text-only" when productName is null.',
+  'Every post shows a product: at least one slide or frame of each post has a "productName" (the real product photo is placed there), also in engagement posts and stories.',
   'People: no recurring people or influencers. Backgrounds may include at most anonymous, non-identifiable people (no faces).',
   '"backgroundPrompt": an English prompt for an image model describing only the scene/surface/lighting/mood in the brand\'s photo style and colours. It must NOT contain the product, packaging, any text, letters, logos or faces. Leave clear empty space where the product and headline will be placed (match the layout).',
-  'Copy: English, natural and idiomatic social-media copy matching the brand tone and caption style from the analysis (even when the account posts in another language). Headlines short (max ~7 words), subtext max ~15 words.',
+  'Copy: English, natural and idiomatic social-media copy matching the brand tone and caption style from the analysis (even when the account posts in another language). Headlines short (max ~7 words), subtext max ~15 words. No emoji in headlines or subtext (slides cannot render them); emoji belong in captions only.',
   'Captions: follow the analysed caption style (length, emojis, hashtags, CTA patterns). 3–8 relevant hashtags including the brand hashtag if the analysis shows one.',
   '"brandColorsHex": pick from the analysed brand colours.',
   'Rationale: 2–4 sentences explaining why the concept fits this brand and audience, referencing specific analysis findings (tone, pillars, visual style) and fact ids.',

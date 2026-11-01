@@ -16,6 +16,8 @@ export const STAGE_TITLES: Record<Stage, string> = {
 export interface RunRow {
   id: string;
   brandSlug: string;
+  /** Short name from the brief (or its products); null only if the brief could not be read. */
+  title: string | null;
   status: RunStatus;
   provider: string;
   error: string | null;
@@ -154,6 +156,7 @@ export interface OpenAiCheck {
 }
 
 export interface BriefView {
+  title: string | null;
   brand: { name: string; slug: string; instagramHandle: string; instagramUrl: string; website: string; shopUrls: string[]; whyThisBrand: string };
   products: { name: string; url: string | null; imageFile: string | null; notes: string | null }[];
   audience: string;
@@ -217,6 +220,8 @@ export const api = {
   kitFileUrl: (kitId: string, rel: string, version: number) => `/api/kits/${kitId}/files/${rel}?v=${version}`,
   draftBrief: (text: string, kitId: string) => request<BriefDraft>('/api/brief/draft', json({ text, kitId })),
   collectKit: (yaml: string, draftId: string, kitId: string) => request<KitCollection>('/api/brief/collect', json({ yaml, draftId, kitId })),
+  assignPhoto: (yaml: string, kitId: string, product: string, imageFile: string | null) =>
+    request<Pick<KitCollection, 'yaml' | 'brief' | 'warnings' | 'kit'>>('/api/brief/photo', json({ yaml, kitId, product, imageFile })),
   listRuns: () => request<RunRow[]>('/api/runs'),
   getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),
   createRun: (briefYaml: string, draftId: string, kitId: string) => request<{ runId: string }>('/api/runs', json({ briefYaml, draftId, kitId })),

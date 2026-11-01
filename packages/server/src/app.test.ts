@@ -79,6 +79,15 @@ describe('server', () => {
     expect((await app.inject(`/api/kits/${kitId}/files/..%2F..%2Frecipe.db`)).statusCode).toBe(404);
     expect((await app.inject({ method: 'DELETE', url: `/api/kits/${kitId}/files/instagram/02.png` })).json<{ instagram: string[] }>().instagram).toEqual(['instagram/01.png']);
 
+    // A photo whose name says nothing is put on a product by hand; only the kit's photos are accepted.
+    const assign = (product: string, imageFile: string | null) =>
+      app.inject({ method: 'POST', url: '/api/brief/photo', payload: { yaml: briefYaml, kitId, product, imageFile } });
+    const assigned = (await assign('GymBeam Protein Bar', 'gymbeam-true-whey-protein.png')).json<{ yaml: string; kit: { products: { name: string; imageFile: string | null; exists: boolean }[] } }>();
+    expect(assigned.kit.products.find((p) => p.name === 'GymBeam Protein Bar')).toEqual({ name: 'GymBeam Protein Bar', imageFile: 'gymbeam-true-whey-protein.png', exists: true });
+    expect(assigned.yaml.startsWith('#')).toBe(true);
+    expect((await assign('GymBeam Protein Bar', 'invented.png')).statusCode).toBe(400);
+    expect((await assign('No such product', null)).statusCode).toBe(400);
+
     // The brief card sees the files of this page only.
     const draft = (await app.inject({ method: 'POST', url: '/api/brief/draft', payload: { text: 'Posts for GymBeam', kitId } })).json<{ draftId: string; kit: { logo: string | null } }>();
     expect(draft.kit.logo).toBe('logo.png');
@@ -107,7 +116,8 @@ describe('server', () => {
     expect(created.statusCode).toBe(201);
     const { runId } = created.json<{ runId: string }>();
 
-    expect((await app.inject(`/api/runs/${runId}`)).json()).toMatchObject({ status: 'queued' });
+    // The fixture brief has no title, so the run is named after its products.
+    expect((await app.inject(`/api/runs/${runId}`)).json()).toMatchObject({ status: 'queued', title: 'True Whey Protein + Creatine Monohydrate + Protein Bar' });
     expect(await worker.tick()).toBe(true);
 
     const run = (await app.inject(`/api/runs/${runId}`)).json<{ status: string; state: { stages: Record<string, { status: string }> } }>();

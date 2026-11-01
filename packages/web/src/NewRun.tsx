@@ -151,6 +151,11 @@ interface KitProps {
   url: (rel: string) => string;
   results: KitItem[] | null;
   onCollect: () => void;
+  /** File names of the uploaded product photos, to choose one per product. */
+  photos: string[];
+  /** Photos that no product of the brief uses. */
+  unassigned: string[];
+  onAssign: (product: string, imageFile: string | null) => void;
 }
 
 /** What the recipe understood from the description, for the person to check before starting. */
@@ -187,6 +192,7 @@ function BriefCard({ draft, stale, kitProps }: { draft: BriefDraft; stale: boole
 
       {b && (
         <dl className="mt-4 space-y-2">
+          {b.title && <Field label="Run name">{b.title}</Field>}
           <Field label="Brand">{b.brand.name}</Field>
           <Field label="Instagram">
             <a href={b.brand.instagramUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">
@@ -220,12 +226,34 @@ function BriefCard({ draft, stale, kitProps }: { draft: BriefDraft; stale: boole
                     <span>
                       {p.name}
                       <span className="block text-xs break-all text-ink-soft">{p.url ?? 'page will be found on the website'}</span>
+                      {kitProps.photos.length > 0 && (
+                        <select
+                          aria-label={`Photo of ${p.name}`}
+                          value={p.imageFile ?? ''}
+                          disabled={stale}
+                          onChange={(e) => kitProps.onAssign(p.name, e.target.value || null)}
+                          className={`mt-1 max-w-full rounded border bg-paper px-1.5 py-0.5 text-xs ${p.imageFile ? 'border-rule' : 'border-pencil text-pencil'}`}
+                        >
+                          <option value="">Choose a photo…</option>
+                          {kitProps.photos.map((f) => (
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </span>
                   </li>
                 );
               })}
             </ul>
           </Field>
+          {kitProps.unassigned.length > 0 && b.products.some((p) => !p.imageFile) && (
+            <p className="rounded-md border-l-4 border-pencil bg-pencil/5 px-4 py-2 text-sm text-pencil">
+              Choose which product each uploaded photo shows ({kitProps.unassigned.join(', ')}), or remove the photos you do not need. Products
+              without a photo get an empty placeholder on their slides.
+            </p>
+          )}
           <Field label="Instagram screenshots">
             {kit?.instagramScreenshots.length ? (
               `${kit.instagramScreenshots.length} for the style analysis`
@@ -363,7 +391,11 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
   const draftKey = `${text.trim()}\n${files.products.join('\n')}`;
   const stale = draft !== null && draftKey !== draftedFrom;
   const yamlEdited = draft !== null && yaml !== draft.yaml;
-  const ready = draft !== null && !stale && (yamlEdited || (draft.missing.length === 0 && draft.issues.length === 0));
+  const photos = files.products.map((rel) => rel.slice('products/'.length));
+  const unassigned = photos.filter((f) => !draft?.brief?.products.some((p) => p.imageFile === f));
+  // An uploaded photo that no product uses, while a product has none, is almost always a missed match.
+  const photoMissed = unassigned.length > 0 && Boolean(draft?.brief?.products.some((p) => !p.imageFile));
+  const ready = draft !== null && !stale && (yamlEdited || (draft.missing.length === 0 && draft.issues.length === 0 && !photoMissed));
 
   const loadExample = async () => {
     setError(null);
@@ -407,6 +439,18 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
       setError((e as Error).message);
     } finally {
       setCollecting(false);
+    }
+  };
+
+  const assignPhoto = async (product: string, imageFile: string | null) => {
+    if (!draft || !kitId) return;
+    setError(null);
+    try {
+      const c = await api.assignPhoto(yaml, kitId, product, imageFile);
+      setDraft({ ...draft, yaml: c.yaml, brief: c.brief, warnings: c.warnings, kit: c.kit });
+      setYaml(c.yaml);
+    } catch (e) {
+      setError((e as Error).message);
     }
   };
 
@@ -465,7 +509,7 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
             </button>
           </section>
 
-          {draft && <BriefCard draft={draft} stale={stale} kitProps={{ collecting, url: fileUrl, results: kitResults, onCollect: () => void collect() }} />}
+          {draft && <BriefCard draft={draft} stale={stale} kitProps={{ collecting, url: fileUrl, results: kitResults, onCollect: () => void collect(), photos, unassigned, onAssign: (product, file) => void assignPhoto(product, file) }} />}
 
           {draft && (
             <div className="mt-3">
@@ -503,7 +547,7 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
             <FileGroup
               field="products"
               label="Product photos"
-              use="Composited as they are. Matched to products when the brief is prepared."
+              use="Composited as they are. Matched to products when the brief is prepared; you can change the match in the brief."
               multiple
               busy={uploading || !kitId}
               count={files.products.length}

@@ -93,10 +93,15 @@ export function App() {
                   <a href={`#/runs/${r.id}`} className={`block rounded-md px-3 py-2 ${active ? 'bg-paper shadow-[0_1px_0_var(--color-rule)]' : 'hover:bg-desk'}`}>
                     <span className="flex items-center gap-2 text-sm font-medium">
                       {waiting && <span className="size-2 rounded-full bg-pencil" aria-hidden />}
-                      {r.brandSlug}
+                      <span className="truncate" title={r.title ?? r.brandSlug}>
+                        {r.title ?? r.brandSlug}
+                      </span>
                     </span>
-                    <span className="flex justify-between text-xs text-ink-soft">
-                      <span>{formatTime(r.createdAt)}</span>
+                    <span className="flex justify-between gap-2 text-xs text-ink-soft">
+                      <span className="truncate">
+                        {r.title && `${r.brandSlug}, `}
+                        {formatTime(r.createdAt)}
+                      </span>
                       <span className={mark.className}>{mark.label}</span>
                     </span>
                   </a>

@@ -1,6 +1,6 @@
 import { bullets, sections, type BuiltPrompt } from './shared.js';
 
-export const BRIEF_INTAKE_PROMPT_VERSION = 'intake@2';
+export const BRIEF_INTAKE_PROMPT_VERSION = 'intake@3';
 
 export interface BriefIntakePromptInput {
   /** The user's request in their own words. */
@@ -20,6 +20,7 @@ ${bullets([
   'URLs: return them as written, adding "https://" when the scheme is missing. "shopUrls" are extra official shops on OTHER domains than the website; usually empty.',
   'Products: list each product the user wants to promote. "imageFile" must be exactly one of the available product photo file names when one clearly matches the product, otherwise null.',
   'Descriptive fields may be proposed when the text does not state them: "audience", "goals" (1–3, one per post is ideal: education, engagement, saves, product introduction, purchase intent) and "whyThisBrand". Base proposals on what the text says about the brand. List every proposed field in "assumptions" with the value you chose.',
+  '"title": a short name for this run in English, 3–6 words, naming the theme or campaign and the product (e.g. "Halloween LOCK IN gaming night", "Protein Fusion label guide"). No brand handle, no dates.',
   'Goals: keep the user\'s wishes for each post in the goal text, including a preferred format (carousel, single image, story) when the text names one.',
   '"constraints": only extra rules the user states (e.g. "no discounts"). "notes": anything else the planner should know about the posts (not about this brief or missing files). Keep the user\'s meaning; write everything in English.',
 ])}`,

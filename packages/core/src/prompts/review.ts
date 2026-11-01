@@ -3,7 +3,7 @@ import type { PostPlan, SlidePlan } from '../schemas/plan.js';
 import { isPriceUsable } from './plan.js';
 import { bullets, sections, type BuiltPrompt } from './shared.js';
 
-export const REVIEW_PROMPT_VERSION = 'review@3';
+export const REVIEW_PROMPT_VERSION = 'review@4';
 
 /** Stage 05 — vision QA of one finished slide against the plan and the brand analysis. */
 export function buildSlideReviewPrompt(opts: {
@@ -16,7 +16,8 @@ export function buildSlideReviewPrompt(opts: {
   const system = sections(
     `You are a strict art director reviewing a finished Instagram slide for ${analysis.brandName} before it is published.`,
     `## How the slide was made
-The background was AI-generated without product or text. The real product photo, the real logo and the headline were composited on top. Judge the result as a viewer would see it on a phone.`,
+The background was AI-generated without product or text. The real product photo, the real logo and the headline were composited on top. Judge the result as a viewer would see it on a phone.
+The headline is always set in capitals by design, and long words may wrap onto the next line at a hyphen. Compare the words with the plan ignoring letter case and line breaks; do not report either as a text problem.`,
     `## Rules
 ${bullets([
   'Score each criterion from 1 to 5 and give one concrete reason based on what you actually see.',

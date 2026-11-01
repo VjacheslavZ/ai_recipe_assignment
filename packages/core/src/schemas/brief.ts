@@ -36,6 +36,8 @@ const referenceInputSchema = z
   .refine((r) => r.url || r.file, 'each reference needs a `url` or a `file`');
 
 export const BriefInputSchema = z.object({
+  /** Short name of the run for the runs list, e.g. "Halloween LOCK IN gaming night". */
+  title: optionalText,
   brand: z.object({
     name: z.string().trim().min(1, 'brand name is required'),
     slug: slugSchema,
@@ -74,6 +76,8 @@ export const BriefProductSchema = z.object({
 export type BriefProduct = z.infer<typeof BriefProductSchema>;
 
 export const BriefSchema = z.object({
+  /** Short name of the run; null in briefs written before titles existed (see runTitle). */
+  title: z.string().nullable().default(null),
   brand: z.object({
     name: z.string().min(1),
     slug: slugSchema,
@@ -189,6 +193,7 @@ export function normalizeBrief(raw: unknown): { brief: Brief; warnings: string[]
   );
 
   const brief = BriefSchema.parse({
+    title: input.title ?? null,
     brand: {
       name: input.brand.name,
       slug: input.brand.slug,
@@ -207,6 +212,13 @@ export function normalizeBrief(raw: unknown): { brief: Brief; warnings: string[]
     notes: input.notes,
   });
   return { brief, warnings };
+}
+
+/** Name of a run in the UI: the brief's title, or its products when the brief has none. */
+export function runTitle(brief: Pick<Brief, 'title' | 'products'>): string {
+  if (brief.title?.trim()) return brief.title.trim();
+  const names = brief.products.map((p) => p.name.replace(/^GymBeam\s+/i, '')).join(' + ');
+  return names.length > 60 ? `${names.slice(0, 57).trimEnd()}…` : names;
 }
 
 /** Hostnames (without `www.`) of the brand website and shops — the allowed research domains. */

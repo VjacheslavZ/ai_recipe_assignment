@@ -70,6 +70,7 @@ export function draftToBriefInput(d: BriefDraftModel): { input: Record<string, u
 
   const handle = d.brand.instagramHandle?.trim() ?? '';
   const input: BriefInput = {
+    title: d.title,
     brand: {
       name: d.brand.name ?? '',
       slug: handle ? slugFromHandle(handle) : '',
@@ -115,11 +116,14 @@ export async function draftBrief(ai: AiClient, opts: DraftBriefOptions): Promise
     model: 'text',
   });
 
-  const draft: BriefDraftModel = {
-    ...res.data,
-    // Only file names that exist; a guessed name would silently show a placeholder later.
-    products: res.data.products.map((p) => ({ ...p, imageFile: p.imageFile && productFiles.includes(p.imageFile) ? p.imageFile : null })),
-  };
+  // Only file names that exist; a guessed name would silently show a placeholder later.
+  const products = res.data.products.map((p) => ({ ...p, imageFile: p.imageFile && productFiles.includes(p.imageFile) ? p.imageFile : null }));
+  // Names like prod1.png say nothing about the product. One product without a photo and one
+  // unused photo can only belong together; anything more is left to the person (the UI asks).
+  const withoutPhoto = products.filter((p) => !p.imageFile);
+  const unused = productFiles.filter((f) => !products.some((p) => p.imageFile === f));
+  if (withoutPhoto.length === 1 && unused.length === 1) withoutPhoto[0]!.imageFile = unused[0]!;
+  const draft: BriefDraftModel = { ...res.data, products };
   const { input, missing } = draftToBriefInput(draft);
   const yaml = `# Prepared from a free-text request; check it before starting the run.\n${toYaml(prune(input), { lineWidth: 0 })}`;
 

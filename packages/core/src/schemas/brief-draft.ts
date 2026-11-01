@@ -5,6 +5,8 @@ import { z } from 'zod';
  * Every field is present; unknown values are null or empty so code can tell "not said" from "said".
  */
 export const BriefDraftModelSchema = z.object({
+  /** Short name of the run (3–6 words), proposed by the model. */
+  title: z.string().nullable(),
   brand: z.object({
     name: z.string().nullable(),
     instagramHandle: z.string().nullable(),

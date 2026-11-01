@@ -9,6 +9,7 @@ import {
   type ContentPlan,
   type ContentPlanModel,
 } from '../schemas/plan.js';
+import { stripEmoji } from '../text.js';
 import { renderPlanMd } from './markdown.js';
 
 export class PlanValidationError extends Error {
@@ -88,6 +89,14 @@ export function validatePlan(raw: ContentPlanModel, analysis: BrandAnalysis): { 
           }
         }
 
+        const headline = stripEmoji(s.headline);
+        const subtext = s.subtext === null ? null : stripEmoji(s.subtext) || null;
+        if (headline !== s.headline || subtext !== s.subtext) {
+          fixes.push(`${where}: emoji removed from the slide text (slides cannot render them)`);
+          s.headline = headline;
+          s.subtext = subtext;
+        }
+
         const colors = s.brandColorsHex.map((c) => c.trim().toUpperCase());
         const valid = colors.filter((c) => HEX_COLOR.test(c));
         if (valid.length !== colors.length) fixes.push(`${where}: dropped invalid colours ${colors.filter((c) => !HEX_COLOR.test(c)).join(', ')}`);
@@ -95,6 +104,7 @@ export function validatePlan(raw: ContentPlanModel, analysis: BrandAnalysis): { 
         return s;
       });
 
+      if (!slides.some((s) => s.productName !== null)) violations.push(`${label}: no slide shows a product; every post needs at least one slide with a productName`);
       return { ...post, slides };
     });
 

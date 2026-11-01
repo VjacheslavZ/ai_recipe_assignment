@@ -258,3 +258,15 @@ export function applyCollectedToYaml(yaml: string, products: CollectBrandKitResu
   }
   return `${header}${toYaml(raw, { lineWidth: 0 })}`;
 }
+
+/** Sets (or clears, with null) one product's photo file in brief YAML, keeping the header comments. */
+export function setProductPhotoInYaml(yaml: string, product: string, imageFile: string | null): string {
+  const header = yaml.match(/^(#.*\n)+/)?.[0] ?? '';
+  const raw = parseYaml(yaml) as { products?: Record<string, unknown>[] };
+  const p = raw.products?.find((x) => x.name === product);
+  if (!p) throw new Error(`no product named "${product}" in the brief`);
+  delete p.image_file;
+  if (imageFile) p.imageFile = imageFile;
+  else delete p.imageFile;
+  return `${header}${toYaml(raw, { lineWidth: 0 })}`;
+}

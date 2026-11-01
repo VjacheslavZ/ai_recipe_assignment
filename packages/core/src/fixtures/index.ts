@@ -147,7 +147,7 @@ export const planFixture = {
       concept: '[MOCK] A flavour question next to the whey packshot to invite comments.',
       rationale: '[MOCK] Community questions are a recurring pillar; the page lists several flavours (F-P1-02), so the question is grounded.',
       slides: [
-        { index: 1, role: 'question', headline: 'Which flavour do you pick after training?', subtext: 'Tell us in the comments 👇', productName: WHEY, showPrice: false, backgroundPrompt: `Bright clean studio with a white plinth in the centre, soft orange accent shadow, generous empty space above, ${NO_PRODUCT}`, layout: 'product-center', brandColorsHex: [WHITE, ACCENT] },
+        { index: 1, role: 'question', headline: 'Which flavour do you pick after training?', subtext: 'Tell us in the comments', productName: WHEY, showPrice: false, backgroundPrompt: `Bright clean studio with a white plinth in the centre, soft orange accent shadow, generous empty space above, ${NO_PRODUCT}`, layout: 'product-center', brandColorsHex: [WHITE, ACCENT] },
       ],
       caption: 'Chocolate, vanilla or something else entirely? 🍫 Tell us in the comments which protein flavour is your post-workout favourite!',
       hashtags: ['#gymbeam', '#protein', '#whey', '#fitnesscroatia'],
@@ -194,6 +194,7 @@ export const captionReviewFixture = {
 
 /** Mock brief draft: always the GymBeam example, whatever the request says. */
 export const briefDraftFixture = {
+  title: '[MOCK] Protein basics for regular trainers',
   brand: {
     name: 'GymBeam Croatia',
     instagramHandle: '@gymbeamhr',

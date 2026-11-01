@@ -16,6 +16,8 @@ import {
   ReviewSchema,
   RUN_INPUTS_DIR,
   RunStore,
+  runTitle,
+  setProductPhotoInYaml,
   STAGES,
   type AiCallRecord,
   type Brief,
@@ -24,7 +26,7 @@ import {
   type Stage,
 } from '@recipe/core';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, isNull } from 'drizzle-orm';
 import { aiCalls, runs, type Db } from './db.js';
 import { copyDir, IMAGE_EXT, KIT_FIELDS, KitStore, listKit, type KitField } from './kits.js';
 import type { PendingQuestions, RunEvent, RunEvents } from './events.js';
@@ -82,6 +84,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   const findRun = (id: string) => db.select().from(runs).where(eq(runs.id, id)).get();
+
+  // Runs created before titles existed get one from their brief file.
+  for (const r of db.select().from(runs).where(isNull(runs.title)).all()) {
+    const file = path.join(r.runDir, '01_brief', BRIEF_INPUT_FILE);
+    if (!existsSync(file)) continue;
+    try {
+      db.update(runs).set({ title: runTitle(parseBriefYaml(readFileSync(file, 'utf8')).brief) }).where(eq(runs.id, r.id)).run();
+    } catch {
+      // A brief that no longer parses keeps showing the brand slug.
+    }
+  }
   // Input files of runs being prepared (ADR-033); next to the database, outside the repo's tracked files.
   const kits = new KitStore(path.join(path.dirname(config.DATABASE_PATH), 'kits'));
   kits.cleanup(2 * 24 * 60 * 60 * 1000);
@@ -208,6 +221,23 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     };
   });
 
+  /** Puts one of the kit's product photos on a product of the brief (or clears it). Free: no AI call. */
+  app.post('/api/brief/photo', async (req, reply) => {
+    const body = (req.body ?? {}) as { yaml?: string; kitId?: string; product?: string; imageFile?: string | null };
+    if (!body.yaml?.trim() || !body.product) return reply.code(400).send({ error: 'brief YAML and product are required' });
+    const kitDir = kits.dir(body.kitId);
+    if (!kitDir) return reply.code(400).send({ error: NO_KIT });
+    const imageFile = body.imageFile || null;
+    if (imageFile && !listKit(kitDir).products.includes(`products/${imageFile}`)) return reply.code(400).send({ error: `no product photo named ${imageFile}` });
+    try {
+      const yaml = setProductPhotoInYaml(body.yaml, body.product, imageFile);
+      const parsed = parseBriefYaml(yaml);
+      return { yaml, brief: parsed.brief, warnings: parsed.warnings, kit: kitStatus(parsed.brief, body.kitId) };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
   /**
    * Create a run from `{ briefYaml, draftId?, kitId? }`. The kit's files move into
    * `<run>/inputs/`, so the run keeps exactly the files it was made from (ADR-033).
@@ -219,8 +249,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (keyMissing()) return reply.code(400).send({ error: KEY_MISSING });
 
     let slug: string;
+    let title: string;
     try {
-      slug = parseBriefYaml(briefYaml).brief.brand.slug;
+      const { brief } = parseBriefYaml(briefYaml);
+      slug = brief.brand.slug;
+      title = runTitle(brief);
     } catch (err) {
       const message = err instanceof BriefValidationError || err instanceof Error ? err.message : String(err);
       return reply.code(400).send({ error: message });
@@ -238,7 +271,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
 
     db.insert(runs)
-      .values({ id: store.runId, brandSlug: slug, status: 'queued', runDir: store.runDir, brandKitDir: inputsDir, provider: config.AI_PROVIDER, createdAt: new Date().toISOString() })
+      .values({ id: store.runId, brandSlug: slug, title, status: 'queued', runDir: store.runDir, brandKitDir: inputsDir, provider: config.AI_PROVIDER, createdAt: new Date().toISOString() })
       .run();
     // The request the brief was prepared from, and the cost of preparing it, belong to the run.
     const draft = draftId ? drafts.get(draftId) : undefined;

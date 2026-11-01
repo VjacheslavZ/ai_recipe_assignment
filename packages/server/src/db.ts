@@ -10,6 +10,8 @@ import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 export const runs = sqliteTable('runs', {
   id: text('id').primaryKey(), // = RunStore runId (folder name)
   brandSlug: text('brand_slug').notNull(),
+  /** Name in the runs list (brief title or its products); null until backfilled for older runs. */
+  title: text('title'),
   status: text('status', { enum: ['queued', 'running', 'succeeded', 'failed'] }).notNull(),
   runDir: text('run_dir').notNull(),
   /** The run's input files (`<runDir>/inputs`); older runs point at the shared brand_kit/ folder. */
@@ -69,7 +71,7 @@ export type Db = BetterSQLite3Database<typeof schema>;
 // nothing to run by hand (ADR-023). Must mirror the table definitions above.
 const DDL = `
 CREATE TABLE IF NOT EXISTS runs (
-  id TEXT PRIMARY KEY, brand_slug TEXT NOT NULL, status TEXT NOT NULL, run_dir TEXT NOT NULL,
+  id TEXT PRIMARY KEY, brand_slug TEXT NOT NULL, title TEXT, status TEXT NOT NULL, run_dir TEXT NOT NULL,
   brand_kit_dir TEXT NOT NULL, provider TEXT NOT NULL, error TEXT, total_cost_usd REAL,
   created_at TEXT NOT NULL, finished_at TEXT
 );
@@ -100,5 +102,8 @@ export function openDb(file: string): { db: Db; close: () => void } {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   sqlite.exec(DDL);
+  // Columns added after the first release: CREATE TABLE IF NOT EXISTS leaves old files without them.
+  const runColumns = (sqlite.prepare('PRAGMA table_info(runs)').all() as { name: string }[]).map((c) => c.name);
+  if (!runColumns.includes('title')) sqlite.exec('ALTER TABLE runs ADD COLUMN title TEXT');
   return { db: drizzle(sqlite, { schema }), close: () => sqlite.close() };
 }

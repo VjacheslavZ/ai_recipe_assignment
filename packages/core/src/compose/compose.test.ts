@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { canvasFor, composeSlide, cutOutWhite, formatPrice, layoutBoxes, pickAccent, prepareLogo, productSceneInput, type Box, type ComposeInput } from './compose.js';
+import { canvasFor, composeSlide, cutOutWhite, formatPrice, layoutBoxes, pickAccent, prepareLogo, productSceneInput, scrimStrength, type Box, type ComposeInput } from './compose.js';
+import { stripEmoji } from '../text.js';
 
 const solid = (width: number, height: number, background: string) =>
   sharp({ create: { width, height, channels: 3, background } }).png().toBuffer();
@@ -205,5 +206,18 @@ describe('helpers', () => {
   it('picks a saturated brand colour as accent', () => {
     expect(pickAccent(['#111111', '#FFFFFF', '#FF6A00'])).toBe('#FF6A00');
     expect(pickAccent(['#111111', '#FFFFFF'])).toBe('#FF6A00');
+  });
+
+  it('darkens bright text areas more than dark ones, within limits', () => {
+    expect(scrimStrength(0.1)).toBe(0.15);
+    expect(scrimStrength(0.65)).toBeCloseTo(0.31, 2);
+    expect(scrimStrength(1)).toBeCloseTo(0.55, 2);
+    expect(scrimStrength(0.5)).toBeLessThan(scrimStrength(0.8));
+  });
+
+  it('removes emoji that the slide fonts cannot render', () => {
+    expect(stripEmoji('Shake 💗  |  Juice-style 🍓')).toBe('Shake | Juice-style');
+    expect(stripEmoji('Strong 💪🏽 ❤️ post-workout')).toBe('Strong post-workout');
+    expect(stripEmoji('€29.90 – 19 g')).toBe('€29.90 – 19 g');
   });
 });

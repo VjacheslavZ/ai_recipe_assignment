@@ -34,8 +34,24 @@ describe('draftBrief', () => {
     // A file name the model made up is dropped rather than kept as a broken reference.
     expect(draft.brief?.products.map((p) => p.imageFile)).toEqual(['true-whey.png', null]);
     expect(draft.assumptions[0]?.field).toBe('audience');
+    expect(draft.brief?.title).toBe(briefDraftFixture.title);
     expect(draft.call.purpose).toBe('brief.intake');
     expect(parseBriefYaml(draft.yaml).brief).toEqual(draft.brief);
+  });
+
+  it('puts the only unused photo on the only product without one', async () => {
+    const draftModel = { ...briefDraftFixture, products: briefDraftFixture.products.slice(0, 1).map((p) => ({ ...p, imageFile: null })) };
+    const ai = createMockClient(config, { fixtures: { 'brief.intake': draftModel }, delayMs: 0 });
+    const draft = await draftBrief(ai, { text: 'GymBeam posts', kitDir: kit(['prod1.png']) });
+    expect(draft.brief?.products.map((p) => p.imageFile)).toEqual(['prod1.png']);
+
+    // Two products and two anonymous photos: the person chooses.
+    const two = createMockClient(config, {
+      fixtures: { 'brief.intake': { ...briefDraftFixture, products: briefDraftFixture.products.slice(0, 2).map((p) => ({ ...p, imageFile: null })) } },
+      delayMs: 0,
+    });
+    const ambiguous = await draftBrief(two, { text: 'GymBeam posts', kitDir: kit(['prod1.png', 'prod2.png']) });
+    expect(ambiguous.brief?.products.map((p) => p.imageFile)).toEqual([null, null]);
   });
 
   it('lists missing required information instead of inventing it', () => {
