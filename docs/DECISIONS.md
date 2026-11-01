@@ -235,3 +235,11 @@ Date: 2026-10-31 · Status: Accepted (decided by the author)
 - **Alternatives:** Keep Ollama for prompt work; a local diffusion server (LocalAI, stable-diffusion.cpp) for backgrounds; a paid "smoke" call per model in the check.
 - **Consequences:** Every realistic test costs money (a few cents per run on the defaults) and needs the key. The check does not prove a model accepts every parameter (e.g. the `web_search` tool); stage 2 reports that on the first run.
 
+## ADR-029 — The brief is written as free text and turned into a structured brief by a model
+Date: 2026-11-01 · Status: Accepted (chosen by the author)
+
+- **Context:** Writing the brief as YAML by hand in the UI is slow and error-prone. The pipeline still needs a validated, structured brief, and its sources (website, Instagram account, product pages) are the ground truth for facts and prices, so they must not be guessed.
+- **Decision:** The Start a run page takes a free-text description. **Prepare brief** calls `POST /api/brief/draft`: one text-model call (`brief.intake`, prompt `intake@1`, structured output `BriefDraftModelSchema`) returns the brief fields plus the fields the model proposed itself. Code then: derives the brand-kit slug from the Instagram handle, keeps only product photo names that exist (brand kit or uploads), drops shop URLs that repeat the website, lists missing required information (name, Instagram, website, products, audience, goals, why this brand) instead of filling it, and validates with the same `normalizeBrief` as stage 01. The UI shows the result as a card; the run starts only when nothing is missing (or from YAML the person edited). The brief YAML stays the input of stage 01, so resuming and the artifacts do not change. The request text is saved as `01_brief/request.txt` and the intake call is recorded in the run's `ai_calls.jsonl` and cost report; drafts wait for their run in memory.
+- **Alternatives:** A form with one field per brief key (no AI, but still a lot of typing); sending the free text straight into stage 01 (simpler, but a misunderstanding is visible only after the run started).
+- **Consequences:** Entering a brief takes a few sentences and about $0.001. Descriptive fields may be the model's proposals; they are labelled so the person can correct them. In mock mode the draft is always the GymBeam example.
+

@@ -75,7 +75,7 @@ every AI call ─► ai_calls ─► cost_report.json
 
 | # | Stage | Input | What it does | Output | Artifact file(s) |
 |---|---|---|---|---|---|
-| 01 | Brief | Brief YAML pasted in the UI (or the GymBeam example); uploaded logo, product images, Instagram screenshots, reference links | Validates with Zod; normalises URLs; copies/registers assets; records which assets exist (logo, N products with names, N screenshots); asks for missing required fields (validation errors shown in the UI) | Normalised brief | `01_brief/brief.json`, `assets` rows |
+| 01 | Brief | Free-text description in the UI, turned into brief YAML by `POST /api/brief/draft` and checked by the person (ADR-029); uploaded logo, product images, Instagram screenshots, reference links | Validates with Zod; normalises URLs; copies/registers assets; records which assets exist (logo, N products with names, N screenshots); asks for missing required fields (validation errors shown in the UI) | Normalised brief | `01_brief/brief.json`, `assets` rows |
 | 02 | Analysis | `brief.json`, screenshots, brand site | (a) Site research via Responses API + `web_search` restricted to the brand domain(s) → product facts with URLs; (b) vision model over Instagram screenshots → tone, themes, visual style, HEX colours, how products/people are shown; (c) merge into one structured analysis. Every fact: `status: verified \| assumption \| unavailable`, `source` (URL or screenshot filename), `evidence` | Brand analysis | `02_analysis/analysis.json`, `analysis.md`, `sources.json` |
 | 03 | Plan | `analysis.json`, `brief.json` | Plans 3 posts: goal (educate / engagement / saves / product intro / purchase intent), format (single / carousel), concept, rationale tied to analysis, slide list with on-image text, product asset per slide, caption (English), hashtags. Only `verified` facts may appear as claims | Content plan | `03_plan/plan.json`, `plan.md` |
 | 04 | Create | `plan.json`, `analysis.json` (colours, style), `brand_kit/` | Per slide: build background prompt (scene without product/logo/text) → image model → `sharp` composite: background + real product cut-out (shadow, scale, placement) + real logo + headline/body text as SVG with brand font → 1080×1350 PNG. Final caption polish. | Finished slides & captions | `04_create/post_<n>/slide_<k>.png`, `captions.json`, `image_prompts.json`, `compose_specs.json` |
@@ -235,12 +235,12 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 |---|---|---|
 | R1 | Choose a real brand with an Instagram account; give exact profile | `brief.example.yaml` (`instagram: https://www.instagram.com/gymbeamhr/`), README, PDF |
 | R2 | Briefly explain the brand choice | PDF "Key decisions"; ADR in DECISIONS.md; `brief.example.yaml` `why_this_brand` |
-| R3 | Interactive brief: ask site/shop URL | UI New run form; CLI validation error with prompt for missing field; `Brief` schema |
+| R3 | Interactive brief: ask site/shop URL | Free-text description → "Prepare brief" (ADR-029) lists missing website/Instagram/products and blocks the start until they are given; `Brief` schema |
 | R4 | Ask products to promote | Form field + `brief.products[]` |
 | R5 | Ask audience | Form field + `brief.audience` |
 | R6 | Ask goals | Form field + `brief.goals[]` |
 | R7 | Ask references / inspiration | Form field + `brief.references[]` (links) |
-| R8 | Allow links or uploads of product images, logos, other references | UI uploads + `POST /api/assets`; `brand_kit/<brand>/` paths in the brief as fallback; `assets` table |
+| R8 | Allow links or uploads of product images, logos, other references, if the approach uses them | UI uploads + `POST /api/assets`; `brand_kit/<brand>/` paths in the brief as fallback; `assets` table |
 | R9 | Prepare and attach own brief answers and inputs for the demo | `brief.example.yaml`, `brand_kit/gymbeamhr/` (+ `SOURCES.md`), copied into `runs/<final>/01_brief/` |
 | R10 | Study Instagram posts: tone, audience, themes, style, colours, product & people presentation | Stage 02 vision analysis of screenshots → `analysis.json` fields `tone`, `audience`, `content_pillars`, `visual_style`, `colors_hex`, `product_presentation`, `people_presentation` |
 | R11 | Use official site / shop / catalogue for facts | Stage 02 `web_search` scoped to gymbeam.hr; `sources.json` |

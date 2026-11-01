@@ -57,12 +57,13 @@ docs/       plan, decision log, refinements
 
 Open http://localhost:5173.
 
-1. **Start a run.** Click "Load the GymBeam example" or paste your own brief (YAML). Optionally upload a logo, product photos and Instagram screenshots for this run only; anything you leave out comes from `brand_kit/<slug>/`. Click **Start run**.
-2. **Watch it.** The run page shows the five stages live: brief, brand analysis, content plan, create posts, review. The Log and Costs tabs show every AI call with model, tokens, time and cost.
-3. **Answer questions.** When a product price cannot be verified on the brand site, the run stops and asks you in a red block at the top, with a countdown. Enter the price or leave it out; after 10 minutes the price is left out automatically. The runs list and the browser tab show "Answer needed" while a run waits.
-4. **Review the posts.** The Posts tab shows the three posts in phone frames: slides in order, QA score per slide, caption with "Copy for Instagram", and the fact-check result. Read "Check before publishing" first. Analysis, Plan and Review tabs show each stage's report.
-5. **Redo a part.** "Re-run from here" on any stage runs it and the stages after it again; earlier stages keep their output. Re-running from Create posts reuses the plan and every background whose prompt did not change.
-6. **Download.** "Download posts.zip" appears after the review: final slides, captions, `POSTS.md` and `review.md`.
+1. **Describe the brief.** Write in your own words what to post: the brand, its Instagram account and website, the products, the audience and the goals (or click "Load the GymBeam example"). Optionally upload a logo, product photos and Instagram screenshots for this run only; anything you leave out comes from `brand_kit/<slug>/`.
+2. **Prepare and check it.** **Prepare brief** turns the text into a structured brief with one cheap text-model call (about $0.001) and shows it as a card. Required facts it cannot find in the text (website, Instagram account, products) are listed as missing, never guessed; fields the AI proposed itself (audience, goals) are marked. Fix the text and prepare again, or edit the brief as YAML. Then click **Start run**; the run keeps your text in `01_brief/request.txt` and counts the call in its costs.
+3. **Watch it.** The run page shows the five stages live: brief, brand analysis, content plan, create posts, review. The Log and Costs tabs show every AI call with model, tokens, time and cost.
+4. **Answer questions.** When a product price cannot be verified on the brand site, the run stops and asks you in a red block at the top, with a countdown. Enter the price or leave it out; after 10 minutes the price is left out automatically. The runs list and the browser tab show "Answer needed" while a run waits.
+5. **Review the posts.** The Posts tab shows the three posts in phone frames: slides in order, QA score per slide, caption with "Copy for Instagram", and the fact-check result. Read "Check before publishing" first. Analysis, Plan and Review tabs show each stage's report.
+6. **Redo a part.** "Re-run from here" on any stage runs it and the stages after it again; earlier stages keep their output. Re-running from Create posts reuses the plan and every background whose prompt did not change.
+7. **Download.** "Download posts.zip" appears after the review: final slides, captions, `POSTS.md` and `review.md`.
 
 ### First run with OpenAI
 
@@ -80,7 +81,7 @@ runs/<brand>_<yyyymmdd-hhmmss>/
   brief.input.yaml, config.json      the brief as given, models and settings (no keys)
   state.json                         stage status, timestamps, errors
   ai_calls.jsonl, cost_report.json   every AI call with tokens, cost and duration
-  01_brief/     brief.json, brief.md
+  01_brief/     request.txt (your description), brief.input.yaml, brief.json, brief.md
   02_analysis/  analysis.json, analysis.md, sources.json
   03_plan/      plan.json, plan.md
   04_create/    post_N/slide_K.png, captions.json, image_prompts.json, compose_specs.json, POSTS.md
