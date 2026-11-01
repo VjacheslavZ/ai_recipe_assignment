@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { findRepoRoot, parseConfig } from '@recipe/core';
@@ -111,7 +111,7 @@ describe('server', () => {
   });
 
   it('creates a run, processes the queued job end to end and serves posts, files, costs and the zip', async () => {
-    const { app, worker } = await setup();
+    const { app, worker, config } = await setup();
     const created = await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml } });
     expect(created.statusCode).toBe(201);
     const { runId } = created.json<{ runId: string }>();
@@ -136,6 +136,35 @@ describe('server', () => {
     const zip = await app.inject(`/api/runs/${runId}/download`);
     expect(zip.headers['content-type']).toBe('application/zip');
     expect((await app.inject('/api/runs')).json()).toHaveLength(1);
+
+    // A cloned run has no zip (it is not in git): the download rebuilds it from the review folder.
+    const zipFile = path.join(config.RUNS_DIR, runId, '05_review', 'posts.zip');
+    rmSync(zipFile);
+    const rebuilt = await app.inject(`/api/runs/${runId}/download`);
+    expect(rebuilt.statusCode).toBe(200);
+    expect(rebuilt.rawPayload.length).toBe(zip.rawPayload.length);
+
+    // Deleting removes the run from the list and its folder from disk.
+    expect((await app.inject({ method: 'DELETE', url: `/api/runs/${runId}` })).json()).toEqual({ deleted: runId });
+    expect((await app.inject('/api/runs')).json()).toHaveLength(0);
+    expect(existsSync(path.join(config.RUNS_DIR, runId))).toBe(false);
+    expect((await app.inject({ method: 'DELETE', url: `/api/runs/${runId}` })).statusCode).toBe(404);
+  });
+
+  it('refuses to delete a run that is still queued', async () => {
+    const { app } = await setup();
+    const { runId } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml } })).json<{ runId: string }>();
+    expect((await app.inject({ method: 'DELETE', url: `/api/runs/${runId}` })).statusCode).toBe(409);
+  });
+
+  it('reports a run whose folder was deleted by hand and lets it be removed', async () => {
+    const { app, worker, config } = await setup();
+    const { runId } = (await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml } })).json<{ runId: string }>();
+    await worker.tick();
+    rmSync(path.join(config.RUNS_DIR, runId), { recursive: true });
+    expect((await app.inject(`/api/runs/${runId}`)).statusCode).toBe(410);
+    expect((await app.inject({ method: 'DELETE', url: `/api/runs/${runId}` })).statusCode).toBe(200);
+    expect((await app.inject('/api/runs')).json()).toHaveLength(0);
   });
 
   it('does not serve files outside the run folder', async () => {

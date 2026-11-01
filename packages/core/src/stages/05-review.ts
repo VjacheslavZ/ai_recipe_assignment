@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { zipSync } from 'fflate';
 import type { StageContext, StageDefinition } from '../pipeline/types.js';
@@ -76,6 +76,26 @@ async function reviewSlide(
 export function revisionPrompt(original: string, review: SlideReviewModel): string {
   const fix = review.backgroundFix ?? review.issues.join('; ');
   return `${original}\nRevision requested by QA review: ${fix || 'make the area behind the text calmer and darker for better contrast'}.`;
+}
+
+export const POSTS_ZIP = 'posts.zip';
+
+/**
+ * Zips the final package of a review folder: posts/ (slides and captions), POSTS.md and
+ * review.md. Everything is on disk, so the zip is not kept in git and is rebuilt when missing.
+ */
+export function buildPostsZip(reviewDir: string): Buffer {
+  const zip: Record<string, Uint8Array> = {};
+  const add = (rel: string) => {
+    const full = path.join(reviewDir, rel);
+    if (!existsSync(full)) return;
+    if (statSync(full).isDirectory()) for (const name of readdirSync(full).sort()) add(path.posix.join(rel, name));
+    else zip[rel] = readFileSync(full);
+  };
+  add('posts');
+  add('POSTS.md');
+  add('review.md');
+  return Buffer.from(zipSync(zip, { level: 6 }));
 }
 
 export const reviewStage: StageDefinition = {
@@ -176,23 +196,13 @@ export const reviewStage: StageDefinition = {
     ctx.store.writeText('review', 'review.md', renderReviewMd(review, plan));
 
     // Final package: chosen slide versions + captions + POSTS.md, also zipped.
-    const zip: Record<string, Uint8Array> = {};
     for (const [key, png] of chosenPng) {
       const [post, slide] = key.split('/');
-      const file = `posts/${postDir(Number(post))}/slide_${slide}.png`;
-      ctx.store.writeBuffer('review', file, png);
-      zip[file] = png;
+      ctx.store.writeBuffer('review', `posts/${postDir(Number(post))}/slide_${slide}.png`, png);
     }
-    for (const c of captions) {
-      const file = `posts/${postDir(c.post)}/caption.txt`;
-      ctx.store.writeText('review', file, `${c.instagramText}\n`);
-      zip[file] = Buffer.from(`${c.instagramText}\n`);
-    }
-    const postsMd = renderPostsMd(plan, captions.map((c) => ({ ...c, slides: c.slides.map((s) => `posts/${s}`) })));
-    ctx.store.writeText('review', 'POSTS.md', postsMd);
-    zip['POSTS.md'] = Buffer.from(postsMd);
-    zip['review.md'] = Buffer.from(renderReviewMd(review, plan));
-    ctx.store.writeBuffer('review', 'posts.zip', Buffer.from(zipSync(zip, { level: 6 })));
+    for (const c of captions) ctx.store.writeText('review', `posts/${postDir(c.post)}/caption.txt`, `${c.instagramText}\n`);
+    ctx.store.writeText('review', 'POSTS.md', renderPostsMd(plan, captions.map((c) => ({ ...c, slides: c.slides.map((s) => `posts/${s}`) }))));
+    ctx.store.writeBuffer('review', POSTS_ZIP, buildPostsZip(path.dirname(ctx.store.path('review', 'POSTS.md'))));
 
     const regenerated = slides.filter((s) => s.attempts.length > 1).length;
     ctx.log(`review: ${slides.filter((s) => s.passed).length}/${slides.length} slide(s) passed, ${regenerated} regenerated; captions ${captionResults.filter((c) => c.passed).length}/${captionResults.length} ok`);

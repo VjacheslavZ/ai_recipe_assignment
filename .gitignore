@@ -17,10 +17,11 @@ data/*
 *.db-wal
 *.db-shm
 
-# Pipeline runs: ignored; the final demo run is committed as part of the
-# submission by adding an exception for it here (!runs/<runId>/).
-runs/*
-!runs/.gitkeep
+# Pipeline runs are committed (artifacts of every run); the zip is rebuilt from
+# 05_review/ on download, and scratch folders stay local.
+runs/*/05_review/posts.zip
+runs/_tmp/
+runs/_scratch/
 
 # OS / editors
 .DS_Store

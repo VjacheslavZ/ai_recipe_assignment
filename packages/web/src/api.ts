@@ -26,6 +26,8 @@ export interface RunRow {
   finishedAt: string | null;
   /** Questions the run is waiting on right now (price confirmations). */
   pendingQuestions?: number;
+  /** The run folder was deleted from disk; the run can only be deleted. */
+  filesMissing?: boolean;
 }
 
 export interface StageState {
@@ -123,11 +125,21 @@ export interface CostReport {
   byModel: Record<string, CostBucket>;
 }
 
+/** An error response of the API; `status` tells e.g. a deleted run folder (410) from a missing run (404). */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `${res.status} ${res.statusText}`);
+    throw new ApiError(body?.error ?? `${res.status} ${res.statusText}`, res.status);
   }
   const type = res.headers.get('content-type') ?? '';
   return (type.includes('application/json') ? res.json() : res.text()) as Promise<T>;
@@ -225,6 +237,7 @@ export const api = {
   listRuns: () => request<RunRow[]>('/api/runs'),
   getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),
   createRun: (briefYaml: string, draftId: string, kitId: string) => request<{ runId: string }>('/api/runs', json({ briefYaml, draftId, kitId })),
+  deleteRun: (id: string) => request<{ deleted: string }>(`/api/runs/${id}`, { method: 'DELETE' }),
   rerun: (id: string, fromStep: number) => request<{ queued: boolean }>(`/api/runs/${id}/rerun`, json({ fromStep })),
   answer: (id: string, questionId: string, answer: string | null) => request<{ ok: boolean }>(`/api/runs/${id}/answers`, json({ questionId, answer })),
   posts: (id: string) => request<PostsResponse>(`/api/runs/${id}/posts`),

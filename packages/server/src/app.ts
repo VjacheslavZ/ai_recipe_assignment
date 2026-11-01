@@ -3,6 +3,7 @@ import path from 'node:path';
 import multipart from '@fastify/multipart';
 import {
   applyCollectedToYaml,
+  buildPostsZip,
   BRIEF_INPUT_FILE,
   BriefValidationError,
   checkBrandKit,
@@ -13,6 +14,7 @@ import {
   draftBrief,
   mockFixtures,
   parseBriefYaml,
+  POSTS_ZIP,
   ReviewSchema,
   RUN_INPUTS_DIR,
   RunStore,
@@ -27,7 +29,7 @@ import {
 } from '@recipe/core';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { desc, eq, isNull } from 'drizzle-orm';
-import { aiCalls, runs, type Db } from './db.js';
+import { aiCalls, jobs, runs, steps, type Db } from './db.js';
 import { copyDir, IMAGE_EXT, KIT_FIELDS, KitStore, listKit, type KitField } from './kits.js';
 import type { PendingQuestions, RunEvent, RunEvents } from './events.js';
 import { enqueueRun, type JobWorker } from './worker.js';
@@ -84,6 +86,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   const findRun = (id: string) => db.select().from(runs).where(eq(runs.id, id)).get();
+  // A run whose folder was deleted by hand keeps its row: it can only be deleted.
+  const filesMissing = (run: { runDir: string }) => !existsSync(path.join(run.runDir, 'state.json'));
+  const gone = (reply: FastifyReply, run: { id: string }) =>
+    reply.code(410).send({ error: `the files of this run were deleted (runs/${run.id}); only deleting the run is possible`, filesMissing: true });
 
   // Runs created before titles existed get one from their brief file.
   for (const r of db.select().from(runs).where(isNull(runs.title)).all()) {
@@ -295,12 +301,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       .from(runs)
       .orderBy(desc(runs.createdAt))
       .all()
-      .map((r) => ({ ...r, pendingQuestions: open.get(r.id) ?? 0 }));
+      .map((r) => ({ ...r, pendingQuestions: open.get(r.id) ?? 0, filesMissing: filesMissing(r) }));
   });
 
   app.get<{ Params: { id: string } }>('/api/runs/:id', async (req, reply) => {
     const run = findRun(req.params.id);
     if (!run) return reply.code(404).send({ error: 'run not found' });
+    // The folder was deleted by hand: the row can still be removed with DELETE.
+    if (!existsSync(path.join(run.runDir, 'state.json'))) return reply.code(410).send({ error: 'the files of this run were deleted', missing: true });
     // Input files, when they live in the run folder (all runs since ADR-033), with their URLs.
     const inputsRel = path.relative(run.runDir, run.brandKitDir);
     const inputs = inputsRel && !inputsRel.startsWith('..') && existsSync(run.brandKitDir) ? { base: `/api/runs/${run.id}/files/${inputsRel}`, ...listKit(run.brandKitDir) } : null;
@@ -310,6 +318,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get<{ Params: { id: string } }>('/api/runs/:id/events', async (req, reply) => {
     const run = findRun(req.params.id);
     if (!run) return reply.code(404).send({ error: 'run not found' });
+    if (filesMissing(run)) return gone(reply, run);
     reply.hijack();
     reply.raw.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     const send = (event: RunEvent | { type: 'snapshot'; [k: string]: unknown }) => reply.raw.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
@@ -329,6 +338,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const run = findRun(req.params.id);
     if (!run) return reply.code(404).send({ error: 'run not found' });
     if (run.status === 'queued' || run.status === 'running') return reply.code(409).send({ error: `run is ${run.status}` });
+    if (filesMissing(run)) return gone(reply, run);
     const { fromStep, toStep } = req.body ?? {};
     for (const n of [fromStep, toStep]) {
       if (n !== undefined && (!Number.isInteger(n) || n < 1 || n > STAGES.length)) return reply.code(400).send({ error: `steps must be 1–${STAGES.length}` });
@@ -408,9 +418,29 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const run = findRun(req.params.id);
     if (!run) return reply.code(404).send({ error: 'run not found' });
     const store = openStore(run.id);
-    if (!store.exists('review', 'posts.zip')) return reply.code(404).send({ error: 'posts.zip is created by the review stage' });
+    // The zip is not kept in git: a cloned run rebuilds it from its review folder.
+    if (!store.exists('review', POSTS_ZIP)) {
+      if (!store.exists('review', 'POSTS.md')) return reply.code(404).send({ error: 'posts.zip is created by the review stage' });
+      store.writeBuffer('review', POSTS_ZIP, buildPostsZip(path.dirname(store.path('review', 'POSTS.md'))));
+    }
     reply.header('content-disposition', `attachment; filename="${run.id}-posts.zip"`);
-    return sendFile(reply, store.path('review', 'posts.zip'));
+    return sendFile(reply, store.path('review', POSTS_ZIP));
+  });
+
+  /** Deletes a finished run: its rows and its folder. A queued or running run is refused. */
+  app.delete<{ Params: { id: string } }>('/api/runs/:id', async (req, reply) => {
+    const run = findRun(req.params.id);
+    if (!run) return reply.code(404).send({ error: 'run not found' });
+    if (run.status === 'queued' || run.status === 'running') return reply.code(409).send({ error: 'the run is still in progress; wait until it finishes' });
+    db.transaction((tx) => {
+      tx.delete(aiCalls).where(eq(aiCalls.runId, run.id)).run();
+      tx.delete(steps).where(eq(steps.runId, run.id)).run();
+      tx.delete(jobs).where(eq(jobs.runId, run.id)).run();
+      tx.delete(runs).where(eq(runs.id, run.id)).run();
+    });
+    const dir = path.resolve(run.runDir);
+    if (dir.startsWith(path.resolve(config.RUNS_DIR) + path.sep)) rmSync(dir, { recursive: true, force: true });
+    return { deleted: run.id };
   });
 
   app.get<{ Params: { id: string } }>('/api/runs/:id/costs', async (req, reply) => {

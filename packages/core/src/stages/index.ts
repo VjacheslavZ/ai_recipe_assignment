@@ -8,7 +8,7 @@ import { reviewStage } from './05-review.js';
 export const stages: StageDefinition[] = [briefStage, analysisStage, planStage, createStage, reviewStage];
 
 export { briefStage, analysisStage, planStage, createStage, reviewStage };
-export { checkCaptionPrices, revisionPrompt, slideScore } from './05-review.js';
+export { buildPostsZip, checkCaptionPrices, POSTS_ZIP, revisionPrompt, slideScore } from './05-review.js';
 export { DEFAULT_FONT, buildInstagramText } from './04-create.js';
 export type { CaptionRecord, ImagePromptRecord } from './04-create.js';
 export { BRIEF_INPUT_FILE, checkBrandKit, listInstagramScreenshots, parseBriefYaml } from './01-brief.js';

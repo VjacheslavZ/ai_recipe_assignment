@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, STAGES, type RunDetail, type Stage } from './api.ts';
-import { formatTime } from './App.tsx';
+import { formatTime, navigate } from './App.tsx';
 import { CostsPanel } from './CostsPanel.tsx';
 import { MarkdownFile } from './MarkdownFile.tsx';
 import { PostsDesk } from './PostsDesk.tsx';
@@ -62,8 +62,11 @@ export function RunView({ runId, onChanged }: { runId: string; onChanged: () => 
   const live = useRunEvents(runId);
   const [run, setRun] = useState<RunDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [filesMissing, setFilesMissing] = useState(false);
   const [tab, setTab] = useState<Tab>('Posts');
   const [rerunError, setRerunError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const onChangedRef = useRef(onChanged);
   onChangedRef.current = onChanged;
 
@@ -71,11 +74,33 @@ export function RunView({ runId, onChanged }: { runId: string; onChanged: () => 
     api
       .getRun(runId)
       .then(setRun)
-      .catch(() => setNotFound(true));
+      .catch((e: Error) => (e.message.includes('were deleted') ? setFilesMissing(true) : setNotFound(true)));
     onChangedRef.current();
   }, [runId, live.revision]);
 
+  const remove = async () => {
+    setDeleteError(null);
+    try {
+      await api.deleteRun(runId);
+      onChanged();
+      navigate('#/');
+    } catch (e) {
+      setDeleteError((e as Error).message);
+      setConfirmDelete(false);
+    }
+  };
+
   if (notFound) return <p className="text-pencil">This run does not exist. Pick another one from the list.</p>;
+  if (filesMissing)
+    return (
+      <div className="max-w-[62ch] space-y-3">
+        <p className="text-pencil">The files of this run were deleted from runs/. Only its entry in the list is left.</p>
+        <button type="button" onClick={() => void remove()} className="rounded-md bg-pencil px-4 py-2 text-sm font-semibold text-paper">
+          Remove from the list
+        </button>
+        {deleteError && <p className="text-sm text-pencil">{deleteError}</p>}
+      </div>
+    );
   if (!run) return <p className="text-ink-soft">Loading run…</p>;
 
   const status = live.status ?? run.status;
@@ -119,8 +144,25 @@ export function RunView({ runId, onChanged }: { runId: string; onChanged: () => 
               Download posts.zip
             </a>
           )}
+          {!active &&
+            (confirmDelete ? (
+              <span className="flex items-center gap-2 text-sm">
+                <span className="text-pencil">Delete this run and its files?</span>
+                <button type="button" onClick={() => void remove()} className="rounded-md bg-pencil px-3 py-1.5 font-semibold text-paper">
+                  Delete run
+                </button>
+                <button type="button" onClick={() => setConfirmDelete(false)} className="px-2 py-1.5 font-medium text-ink-soft underline underline-offset-2">
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button type="button" onClick={() => setConfirmDelete(true)} className="text-sm font-medium text-ink-soft underline underline-offset-2 hover:text-pencil">
+                Delete run
+              </button>
+            ))}
         </div>
       </header>
+      {deleteError && <p className="mt-3 text-sm text-pencil">{deleteError}</p>}
 
       {live.questions.length > 0 && (
         <section aria-labelledby="waiting-title" className="mt-6 rounded-lg border-2 border-pencil bg-pencil/5 p-4 md:p-5">
