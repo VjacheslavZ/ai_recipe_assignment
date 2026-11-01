@@ -154,8 +154,35 @@ export interface BriefView {
   notes: string | null;
 }
 
+export interface KitStatus {
+  logo: string | null;
+  products: { name: string; imageFile: string | null; exists: boolean }[];
+  instagramScreenshots: string[];
+  missing: string[];
+}
+
+export interface KitItem {
+  kind: 'logo' | 'product';
+  product: string | null;
+  file: string | null;
+  status: 'collected' | 'kept' | 'not_found';
+  sourceUrl: string | null;
+  pageUrl: string | null;
+  note: string;
+}
+
+export interface KitCollection {
+  yaml: string;
+  brief: BriefView;
+  warnings: string[];
+  items: KitItem[];
+  kit: KitStatus;
+  costUsd: number;
+}
+
 export interface BriefDraft {
   draftId: string;
+  kit: KitStatus | null;
   yaml: string;
   brief: BriefView | null;
   missing: string[];
@@ -170,6 +197,7 @@ export const api = {
   exampleBrief: () => request<string>('/api/example-brief'),
   exampleRequest: () => request<string>('/api/example-request'),
   draftBrief: (text: string, productFiles: string[]) => request<BriefDraft>('/api/brief/draft', json({ text, productFiles })),
+  collectKit: (yaml: string, draftId: string) => request<KitCollection>('/api/brief/collect', json({ yaml, draftId })),
   listRuns: () => request<RunRow[]>('/api/runs'),
   getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),
   createRun: (form: FormData) => request<{ runId: string }>('/api/runs', { method: 'POST', body: form }),

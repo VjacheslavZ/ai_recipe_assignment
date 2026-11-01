@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { api, type BriefDraft, type OpenAiCheck } from './api.ts';
+import { api, type BriefDraft, type KitItem, type OpenAiCheck } from './api.ts';
 
 function FilePicker(props: { name: string; label: string; hint: string; multiple?: boolean; files: File[]; onChange: (f: File[]) => void }) {
   return (
@@ -81,7 +81,7 @@ function OpenAiSetup() {
   );
 }
 
-const DESCRIBE_HINT = `For example: Three posts for GymBeam Croatia (@gymbeamhr), website gymbeam.hr. Products: True Whey Protein and Creatine Monohydrate. Audience: people in Croatia who train regularly. Goals: one educational post, one that gets comments, one that sells. No discounts.`;
+const DESCRIBE_HINT = `For example: Three posts for GymBeam Croatia (@gymbeamhr), website gymbeam.hr. Products: Protein Fusion and 32% Protein Wafer. Audience: people in Croatia who train regularly. Goals: one educational post, one that gets comments, one that sells. No discounts.`;
 
 const FIELD_LABEL: Record<string, string> = { whyThisBrand: 'Why this brand', audience: 'Audience', goals: 'Goals' };
 
@@ -94,9 +94,32 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+function Thumb({ slug, file, version, label }: { slug: string; file: string; version: number; label: string }) {
+  return (
+    <img
+      src={`/api/brand-kit/${slug}/${file}?v=${version}`}
+      alt={label}
+      className="h-14 w-14 shrink-0 rounded border border-rule bg-[repeating-conic-gradient(#e5e5e5_0_25%,#fff_0_50%)] bg-[length:12px_12px] object-contain"
+    />
+  );
+}
+
+const KIT_STATUS: Record<KitItem['status'], string> = { collected: 'Taken from the website', kept: 'Already in the brand kit', not_found: 'Not found' };
+
+interface KitProps {
+  collecting: boolean;
+  /** Bumps after a collection, so previews reload. */
+  version: number;
+  results: KitItem[] | null;
+  onCollect: () => void;
+}
+
 /** What the recipe understood from the description, for the person to check before starting. */
-function BriefCard({ draft, stale }: { draft: BriefDraft; stale: boolean }) {
+function BriefCard({ draft, stale, kitProps }: { draft: BriefDraft; stale: boolean; kitProps: KitProps }) {
   const b = draft.brief;
+  const kit = draft.kit;
+  const photoOf = (name: string) => kit?.products.find((p) => p.name === name);
+  const kitIncomplete = kit !== null && b !== null && (!kit.logo || kit.products.some((p) => !p.exists) || b.products.some((p) => !p.url));
   const blocked = draft.missing.length > 0 || draft.issues.length > 0;
   return (
     <section aria-labelledby="draft-title" className={`mt-6 rounded-md bg-paper px-5 py-4 shadow-[0_1px_0_var(--color-rule)] ${stale ? 'opacity-60' : ''}`}>
@@ -135,21 +158,79 @@ function BriefCard({ draft, stale }: { draft: BriefDraft; stale: boolean }) {
             {[b.brand.website, ...b.brand.shopUrls].join(', ')}
             <span className="block text-xs text-ink-soft">Facts and prices are taken only from these sites.</span>
           </Field>
-          <Field label="Brand kit">
-            <span className="font-mono text-xs">brand_kit/{b.brand.slug}/</span>
+          <Field label="Logo">
+            {kit?.logo ? (
+              <Thumb slug={b.brand.slug} file={kit.logo} version={kitProps.version} label={`${b.brand.name} logo`} />
+            ) : (
+              <span className="text-pencil">Missing: slides will have no logo</span>
+            )}
+            <span className="mt-1 block font-mono text-xs text-ink-soft">brand_kit/{b.brand.slug}/</span>
           </Field>
           <Field label="Products">
-            <ul className="space-y-1">
-              {b.products.map((p) => (
-                <li key={p.name}>
-                  {p.name}
-                  <span className="block text-xs text-ink-soft">
-                    {p.url ?? 'page will be found on the website'} · {p.imageFile ? `photo ${p.imageFile}` : 'no photo matched'}
-                  </span>
+            <ul className="space-y-2">
+              {b.products.map((p) => {
+                const photo = photoOf(p.name);
+                return (
+                  <li key={p.name} className="flex items-start gap-3">
+                    {photo?.exists && photo.imageFile ? (
+                      <Thumb slug={b.brand.slug} file={`products/${photo.imageFile}`} version={kitProps.version} label={p.name} />
+                    ) : (
+                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded border border-dashed border-pencil text-center text-[10px] leading-tight text-pencil">
+                        no photo
+                      </span>
+                    )}
+                    <span>
+                      {p.name}
+                      <span className="block text-xs break-all text-ink-soft">{p.url ?? 'page will be found on the website'}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </Field>
+          <Field label="Instagram screenshots">
+            {kit?.instagramScreenshots.length ? (
+              `${kit.instagramScreenshots.length} in the brand kit`
+            ) : (
+              <span className="text-ink-soft">None: the style analysis uses the website only. Add 6–10 screenshots to improve it.</span>
+            )}
+          </Field>
+          {kitIncomplete && (
+            <div className="rounded-md bg-desk px-4 py-3">
+              <button
+                type="button"
+                onClick={kitProps.onCollect}
+                disabled={kitProps.collecting || stale}
+                className="rounded-md border border-ink px-3 py-1.5 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {kitProps.collecting ? 'Looking on the website…' : `Find the logo and product photos on ${new URL(b.brand.website).hostname}`}
+              </button>
+              <p className="mt-1 text-xs text-ink-soft">
+                Downloads the real files from the brand's site and checks each with a vision model (about $0.01). Nothing is generated. Photos you
+                already have are checked and kept if they show the right product.
+              </p>
+            </div>
+          )}
+          {kitProps.results && (
+            <ul className="space-y-1 text-xs">
+              {kitProps.results.map((r) => (
+                <li key={`${r.kind}-${r.product ?? ''}`} className={r.status === 'not_found' ? 'text-pencil' : 'text-ink-soft'}>
+                  <span className="font-medium">{r.kind === 'logo' ? 'Logo' : r.product}</span>: {KIT_STATUS[r.status]}
+                  {r.status !== 'kept' && ` — ${r.note}`}
+                  {r.sourceUrl && (
+                    <>
+                      {' '}
+                      (
+                      <a href={r.sourceUrl} target="_blank" rel="noreferrer" className="underline">
+                        source
+                      </a>
+                      )
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
-          </Field>
+          )}
           <Field label="Audience">{b.audience}</Field>
           <Field label="Goals">
             <ul className="list-disc pl-4">
@@ -209,6 +290,9 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [collecting, setCollecting] = useState(false);
+  const [kitVersion, setKitVersion] = useState(0);
+  const [kitResults, setKitResults] = useState<KitItem[] | null>(null);
 
   // Product photos take part in the brief (matched to products), so new uploads also need a new draft.
   const draftKey = `${text.trim()}\n${products.map((f) => f.name).join('\n')}`;
@@ -232,11 +316,30 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
       const d = await api.draftBrief(text, products.map((f) => f.name));
       setDraft(d);
       setYaml(d.yaml);
+      setKitResults(null);
       setDraftedFrom(draftKey);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setPreparing(false);
+    }
+  };
+
+  const collect = async () => {
+    if (!draft) return;
+    setCollecting(true);
+    setError(null);
+    try {
+      const c = await api.collectKit(yaml, draft.draftId);
+      // The brief now names the found pages and photo files; it counts as prepared, not edited.
+      setDraft({ ...draft, yaml: c.yaml, brief: c.brief, warnings: c.warnings, kit: c.kit });
+      setYaml(c.yaml);
+      setKitResults(c.items);
+      setKitVersion((v) => v + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setCollecting(false);
     }
   };
 
@@ -301,7 +404,7 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
             </button>
           </section>
 
-          {draft && <BriefCard draft={draft} stale={stale} />}
+          {draft && <BriefCard draft={draft} stale={stale} kitProps={{ collecting, version: kitVersion, results: kitResults, onCollect: () => void collect() }} />}
 
           {draft && (
             <div className="mt-3">

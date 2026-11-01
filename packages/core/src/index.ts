@@ -47,3 +47,6 @@ export {
 } from './stages/index.js';
 export type { MergeInput, CaptionRecord, ImagePromptRecord, BriefDraft, DraftBriefOptions } from './stages/index.js';
 export * from './compose/compose.js';
+export { applyCollectedToYaml, collectBrandKit, productFileName, KIT_SOURCES_FILE } from './kit/collect.js';
+export type { CollectBrandKitOptions, CollectBrandKitResult } from './kit/collect.js';
+export { findLogoCandidates, findProductImages, findResultLinks, searchUrls } from './kit/extract.js';

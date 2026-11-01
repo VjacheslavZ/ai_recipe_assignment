@@ -2,9 +2,12 @@ import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, rea
 import path from 'node:path';
 import multipart from '@fastify/multipart';
 import {
+  applyCollectedToYaml,
   BRIEF_INPUT_FILE,
   BriefValidationError,
+  checkBrandKit,
   checkOpenAiSetup,
+  collectBrandKit,
   ContentPlanSchema,
   createAiClient,
   draftBrief,
@@ -14,6 +17,7 @@ import {
   RunStore,
   STAGES,
   type AiCallRecord,
+  type Brief,
   type CaptionRecord,
   type Config,
   type Stage,
@@ -113,23 +117,63 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // Free-text requests turned into briefs, kept until the run starts so the run records the
-  // request and the cost of that AI call. In memory: a restart only loses unstarted drafts.
-  const drafts = new Map<string, { text: string; call: AiCallRecord }>();
+  // request and the cost of the AI calls made for it (brief, brand kit). In memory: a restart
+  // only loses unstarted drafts.
+  const drafts = new Map<string, { text: string; calls: AiCallRecord[] }>();
+  const keyMissing = () => config.AI_PROVIDER === 'openai' && !config.OPENAI_API_KEY;
+  const KEY_MISSING = 'OPENAI_API_KEY is not set. Add it to .env and run: docker compose restart server';
+  const kitStatus = (brief: Brief | null) => (brief ? checkBrandKit(config.BRAND_KIT_DIR, brief) : null);
 
   /** Free text → brief for the person to check (one cheap text-model call). */
   app.post('/api/brief/draft', async (req, reply) => {
     const body = (req.body ?? {}) as { text?: string; productFiles?: string[] };
     if (!body.text?.trim()) return reply.code(400).send({ error: 'describe the brand and the posts you want' });
-    if (config.AI_PROVIDER === 'openai' && !config.OPENAI_API_KEY) {
-      return reply.code(400).send({ error: 'OPENAI_API_KEY is not set. Add it to .env and run: docker compose restart server' });
-    }
+    if (keyMissing()) return reply.code(400).send({ error: KEY_MISSING });
     const ai = createAiClient(config, { fixtures: mockFixtures });
     const draft = await draftBrief(ai, { text: body.text, brandKitDir: config.BRAND_KIT_DIR, uploadedProductFiles: body.productFiles ?? [] });
     app.log.info({ purpose: draft.call.purpose, model: draft.call.model, costUsd: draft.call.costUsd }, 'brief draft');
     const draftId = draft.call.id;
-    drafts.set(draftId, { text: body.text, call: draft.call });
+    drafts.set(draftId, { text: body.text, calls: [draft.call] });
     if (drafts.size > 50) drafts.delete(drafts.keys().next().value!);
-    return { ...draft, draftId };
+    return { ...draft, draftId, kit: kitStatus(draft.brief) };
+  });
+
+  /**
+   * Collect the logo and product packshots from the brand's website into brand_kit/<slug>/
+   * (ADR-030) and write the found product pages and photo files into the brief.
+   */
+  app.post('/api/brief/collect', async (req, reply) => {
+    const body = (req.body ?? {}) as { yaml?: string; draftId?: string; replace?: boolean };
+    if (!body.yaml?.trim()) return reply.code(400).send({ error: 'brief YAML is required' });
+    if (keyMissing()) return reply.code(400).send({ error: KEY_MISSING });
+    let brief: Brief;
+    try {
+      brief = parseBriefYaml(body.yaml).brief;
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+    const ai = createAiClient(config, { fixtures: mockFixtures });
+    const result = await collectBrandKit(ai, { brief, brandKitDir: config.BRAND_KIT_DIR, replace: body.replace, log: (m) => app.log.info(m) });
+    if (body.draftId) drafts.get(body.draftId)?.calls.push(...result.calls);
+    const yaml = applyCollectedToYaml(body.yaml, result.products);
+    const parsed = parseBriefYaml(yaml);
+    return {
+      yaml,
+      brief: parsed.brief,
+      warnings: parsed.warnings.filter((w) => !w.includes('no valid product page URL')),
+      items: result.items,
+      kit: kitStatus(parsed.brief),
+      costUsd: result.calls.reduce((sum, c) => sum + (c.costUsd ?? 0), 0),
+    };
+  });
+
+  /** Brand-kit images for previews on the Start a run page. */
+  app.get<{ Params: { slug: string; '*': string } }>('/api/brand-kit/:slug/*', async (req, reply) => {
+    const root = path.resolve(config.BRAND_KIT_DIR, safeName(req.params.slug));
+    const file = path.resolve(root, req.params['*']);
+    if (!file.startsWith(root + path.sep) || !IMAGE_EXT.test(file) || !existsSync(file)) return reply.code(404).send({ error: 'not found' });
+    reply.header('cache-control', 'no-store');
+    return sendFile(reply, file);
   });
 
   /**
@@ -192,8 +236,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const draft = draftId ? drafts.get(draftId) : undefined;
     if (draft) {
       store.writeText('brief', 'request.txt', draft.text);
-      store.recordAiCall(draft.call);
-      db.insert(aiCalls).values({ ...draft.call, runId: store.runId, error: draft.call.error ?? null }).onConflictDoNothing().run();
+      for (const call of draft.calls) {
+        store.recordAiCall(call);
+        db.insert(aiCalls).values({ ...call, runId: store.runId, error: call.error ?? null }).onConflictDoNothing().run();
+      }
       drafts.delete(draftId!);
     }
     enqueueRun(db, store.runId);

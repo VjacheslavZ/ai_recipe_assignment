@@ -216,6 +216,10 @@ export const briefDraftFixture = {
 
 export const mockFixtures: MockFixtures = {
   'brief.intake': briefDraftFixture,
+  // The mock cannot read the search results, so it matches no product pages; image checks take the first candidate.
+  'kit.match': { matches: [] },
+  'kit.logo': { choice: 1, reason: '[MOCK] first candidate' },
+  'kit.product': { choice: 1, reason: '[MOCK] first candidate' },
   'analysis.site': { ...siteFixture, __sources: siteFixtureSources },
   'analysis.instagram': instagramFixture,
   plan: planFixture,
