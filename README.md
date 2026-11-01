@@ -48,10 +48,10 @@ packages/
   core/     pipeline stages, Zod schemas, OpenAI wrapper + cost tracking, sharp compositing
   server/   Fastify REST + SSE, SQLite (Drizzle), in-process job queue
   web/      React + Vite + Tailwind UI
-brand_kit/
-  gymbeamhr/  logo, product photos, Instagram screenshots, fonts (see its README)
+examples/
+  gymbeamhr/  input files of the demo run: logo, product photos, Instagram screenshots (see its README)
 runs/       run artifacts, one folder per run (the final demo run is committed)
-data/       SQLite database (git-ignored)
+data/       SQLite database and files of runs being prepared (git-ignored)
 docs/       plan, decision log, refinements
 ```
 
@@ -59,8 +59,8 @@ docs/       plan, decision log, refinements
 
 Open http://localhost:5173.
 
-1. **Describe the brief.** Write in your own words what to post: the brand, its Instagram account and website, the products, the audience and the goals. The prompt used for the demo run is [PROMPT.md](PROMPT.md); "Load the GymBeam example" puts it in the field. Optionally upload a logo, product photos and Instagram screenshots for this run only; anything you leave out comes from `brand_kit/<slug>/`.
-2. **Prepare and check it.** **Prepare brief** turns the text into a structured brief with one cheap text-model call (about $0.001) and shows it as a card. Required facts it cannot find in the text (website, Instagram account, products) are listed as missing, never guessed; fields the AI proposed itself (audience, goals) are marked. Fix the text and prepare again, or edit the brief as YAML. The card also shows the brand kit: if the logo, a product photo or a product page is missing, **Find the logo and product photos on <site>** downloads them from the brand's own website, has a vision model check each image (photos already in the kit are checked too), saves them in `brand_kit/<slug>/` with their sources in `sources.json`, and writes the product pages into the brief (about $0.01). Nothing is generated. Then click **Start run**; the run keeps your text in `01_brief/request.txt` and counts the call in its costs.
+1. **Describe the brief.** Write in your own words what to post: the brand, its Instagram account and website, the products, the audience and the goals. The prompt used for the demo run is [PROMPT.md](PROMPT.md); "Load the GymBeam example" puts it in the field. Add the files the run is made from under **Files for this run**: a logo, a photo per product and 6–10 Instagram screenshots. They show as small tiles with what each is used for (every slide, the product it matches, style) and can be removed or replaced; "Load the GymBeam example" also loads the demo files from `examples/gymbeamhr/`. Files belong to this run only: when it starts they are moved into `runs/<runId>/inputs/`, and the next run starts empty.
+2. **Prepare and check it.** **Prepare brief** turns the text into a structured brief with one cheap text-model call (about $0.001) and shows it as a card. Required facts it cannot find in the text (website, Instagram account, products) are listed as missing, never guessed; fields the AI proposed itself (audience, goals) are marked. Fix the text and prepare again, or edit the brief as YAML. The card also checks the files: if the logo, a product photo or a product page is missing, **Find the logo and product photos on <site>** downloads them from the brand's own website, has a vision model check each image (photos already added are checked too), adds them to the run's files with their sources in `sources.json`, and writes the product pages into the brief (about $0.01). Nothing is generated. Then click **Start run**; the run keeps your text in `01_brief/request.txt` and counts the call in its costs.
 3. **Watch it.** The run page shows the five stages live: brief, brand analysis, content plan, create posts, review. The Log and Costs tabs show every AI call with model, tokens, time and cost.
 4. **Answer questions.** When a product price cannot be verified on the brand site, the run stops and asks you in a red block at the top, with a countdown. Enter the price or leave it out; after 10 minutes the price is left out automatically. The runs list and the browser tab show "Answer needed" while a run waits.
 5. **Review the posts.** The Posts tab shows the three posts in phone frames: slides in order, QA score per slide, caption with "Copy for Instagram", and the fact-check result. Read "Check before publishing" first. Analysis, Plan and Review tabs show each stage's report.
@@ -83,6 +83,7 @@ runs/<brand>_<yyyymmdd-hhmmss>/
   brief.input.yaml, config.json      the brief as given, models and settings (no keys)
   state.json                         stage status, timestamps, errors
   ai_calls.jsonl, cost_report.json   every AI call with tokens, cost and duration
+  inputs/       logo.png, products/, instagram/ (the files the run was made from), sources.json
   01_brief/     request.txt (your description), brief.input.yaml, brief.json, brief.md
   02_analysis/  analysis.json, analysis.md, sources.json
   03_plan/      plan.json, plan.md
@@ -95,8 +96,8 @@ runs/<brand>_<yyyymmdd-hhmmss>/
 | When | Action | Why it cannot be automated |
 | --- | --- | --- |
 | Setup | Put an OpenAI API key in `.env` (`OPENAI_API_KEY`), set `AI_PROVIDER=openai` | Secret; never committed |
-| Before the run | Check the logo and product photos in the brief card: collected from the brand's website, or put in `brand_kit/<slug>/` / uploaded | Posts show only real products; the pipeline never generates packaging, and a person confirms the files are the right ones |
-| Before the run | 6–10 screenshots of recent Instagram posts in `brand_kit/<slug>/instagram/` | Instagram blocks automated access; screenshots feed the style analysis |
+| Before the run | Check the logo and product photos in the brief card: uploaded on the Start a run page or collected from the brand's website | Posts show only real products; the pipeline never generates packaging, and a person confirms the files are the right ones |
+| Before the run | Upload 6–10 screenshots of recent Instagram posts | Instagram blocks automated access; screenshots feed the style analysis |
 | Before the run | Check product names and page URLs in the brief (fields marked `VERIFY` / `TODO`) | They are the ground truth for facts and prices |
 | During the run | Answer price questions, or skip them | A price is printed only if it is verified on the brand site or confirmed by you |
 | After the run | Read the "Check before publishing" list in `review.md` / the Posts tab | Lists slides below the QA threshold, unsupported claims, caption issues |
@@ -131,5 +132,5 @@ Mock runs finish in seconds. With OpenAI most of the time goes to image generati
 | `sharp` or `better-sqlite3` fails to load, or a package is missing | The container's `node_modules` are stale: `docker compose exec server pnpm install`, then `docker compose restart`. To start clean: `docker compose down -v && docker compose up --build` |
 | Code changes do not reload | The server polls for changes (`CHOKIDAR_USEPOLLING` in `compose.yaml`); check `docker compose logs -f server` for "Restarting" |
 | The analysis finds no product facts | Check the product URLs in the brief. If the text model rejects the `web_search` tool, set `OPENAI_TEXT_MODEL` to a model that supports it (for example `gpt-5.4-nano`) |
-| A stage failed | Fix the cause (brief, brand kit, key), then click **Re-run from here** on that stage |
-| Text on slides uses a generic font | Slides use the system sans-serif bold through Pango; brand fonts in `brand_kit/<slug>/fonts/` are not wired in yet |
+| A stage failed | Fix the cause (brief, input files, key), then click **Re-run from here** on that stage |
+| Text on slides uses a generic font | Slides use the system sans-serif bold through Pango; brand fonts are not wired in yet |

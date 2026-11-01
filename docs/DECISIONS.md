@@ -47,7 +47,7 @@ Date: 2026-10-30 · Status: Accepted
 Date: 2026-10-30 · Status: Accepted
 
 - **Context:** Instagram blocks automated/unauthenticated access; scraping violates ToS and is unreliable.
-- **Decision:** Human action: 6–10 screenshots of @gymbeamhr (grid + representative posts) into `brand_kit/gymbeamhr/instagram/` or uploaded in the UI. Vision model analyses them. Analysis records Instagram as "accessed via screenshots" and lists direct access under unavailable sources.
+- **Decision:** Human action: 6–10 screenshots of @gymbeamhr (grid + representative posts) into `brand_kit/gymbeamhr/instagram/` or uploaded in the UI (per-run uploads only since ADR-033). Vision model analyses them. Analysis records Instagram as "accessed via screenshots" and lists direct access under unavailable sources.
 - **Alternatives:** Scraping tools/headless login; Instagram Graph API (requires brand's business account access).
 - **Consequences:** Reproducible input set committed with the submission; sample limited to what was captured — stated as a limitation.
 
@@ -79,7 +79,7 @@ Date: 2026-10-30 · Status: Accepted
 Date: 2026-10-30 · Status: Accepted
 
 - **Context:** Model names, prices and quality tiers change; dev runs should be cheaper than the final run.
-- **Decision:** `.env` keys `OPENAI_TEXT_MODEL`, `OPENAI_VISION_MODEL`, `OPENAI_IMAGE_MODEL`, `IMAGE_SIZE`, `IMAGE_QUALITY`, `QA_SCORE_THRESHOLD`, `MAX_REGENERATIONS`, `DATABASE_PATH`, `RUNS_DIR`, `BRAND_KIT_DIR`, `PORT`, validated by Zod in `packages/core/src/config.ts`; price table in config. Effective config snapshotted into each run (`config.json` / `runs.config_json`).
+- **Decision:** `.env` keys `OPENAI_TEXT_MODEL`, `OPENAI_VISION_MODEL`, `OPENAI_IMAGE_MODEL`, `IMAGE_SIZE`, `IMAGE_QUALITY`, `QA_SCORE_THRESHOLD`, `MAX_REGENERATIONS`, `DATABASE_PATH`, `RUNS_DIR`, `BRAND_KIT_DIR` (removed in ADR-033), `PORT`, validated by Zod in `packages/core/src/config.ts`; price table in config. Effective config snapshotted into each run (`config.json` / `runs.config_json`).
 - **Alternatives:** Hard-coded models.
 - **Consequences:** Reproducibility — the exact models/settings of the submitted run are recorded; `.env.example` doubles as the "example config without keys".
 
@@ -267,3 +267,11 @@ Date: 2026-11-01 · Status: Accepted (chosen by the author)
 - **Decision:** With `BACKGROUND_MODE=edit` (default) a product slide's background is an OpenAI image edit: the product cut-out sits on a neutral canvas of the generated size exactly where compose will place it after a centre cover-crop, with a mask that keeps the product; the prompt (`background@2`) asks for a surface, matching light, a contact shadow and colours that make the packaging stand out. Compose then places the real product photo on the same spot (no drop shadow, the scene has one) with logo and text. Because masking is only guidance for GPT Image, code measures how much the product changed inside the mask; above 40 (kept ≈ 14, redrawn ≈ 94) the edit is replaced by an empty-scene background (`.plain` call) and a warning is logged. The same applies to QA regenerations in stage 05. `BACKGROUND_MODE=generate` keeps the old behaviour.
 - **Alternatives:** product description in the text prompt only (cheaper, still pasted in); the product as a reference image without a mask (the model tends to draw it again, without a fixed place to cover); letting the model render the product (labels not exact).
 - **Consequences:** On the final model the product looks like part of the photo at about 3× the image cost of the test model (≈ $0.015 vs $0.005 per low-quality 1024² image; high quality costs more). The test model redraws the product, so in test runs product slides cost one extra plain image call. Evidence and numbers: RF-001.
+
+## ADR-033 — Input files are uploaded per run; the demo files live in examples/
+Date: 2026-11-01 · Status: Accepted (chosen by the author)
+
+- **Context:** Logo, product photos and Instagram screenshots came from a shared `brand_kit/<slug>/` folder, with uploads only overriding it. A run silently used whatever was in that folder (files of an earlier brand or an earlier run), the person could not see which files a run would use, and the repository mixed app code with one brand's inputs.
+- **Decision:** The Start a run page creates a temporary kit (`POST /api/kits`, stored in `data/kits/<id>/`, removed after 2 days if no run starts). Files are added by upload (`logo`, `products`, `screenshots`), by "Find the logo and product photos" (ADR-030) or by "Load the GymBeam example", which copies `examples/gymbeamhr/`. The page shows them as tiles with their use (every slide / matched product or "not used in the brief" / style) and lets the person remove or replace each. `POST /api/runs` moves the kit into `runs/<runId>/inputs/`, which the pipeline reads (`kitDir`) and the run page shows as "Files used by this run". `BRAND_KIT_DIR` and `brand_kit/` are removed.
+- **Alternatives:** Keeping the shared folder with uploads as overrides (rejected: hidden inputs, cross-run leaks); uploading files only when the run starts (rejected: no preview, and "Find the logo" needs a place to save files before the run).
+- **Consequences:** Every run folder holds exactly the files it was made from, so it is reproducible and reviewable on its own; the next run starts empty. Runs take more disk space (≈ 50 MB per run with ten full-size screenshots). Runs created before this change still point at `brand_kit/`, so re-running them needs their files put back there.

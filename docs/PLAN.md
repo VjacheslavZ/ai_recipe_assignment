@@ -15,7 +15,7 @@ Related docs: [DECISIONS.md](./DECISIONS.md) (ADRs) · [TIMELOG.md](./TIMELOG.md
 | # | Criterion | How it is checked |
 |---|---|---|
 | S1 | 3 finished posts, numbered 1/2/3; carousel slides in order; each has caption, format, goal, rationale | `runs/<id>/04_create/` + `posts/POST_1..3/` folders; gallery screen |
-| S2 | Product photos, logo, packaging, labels are pixel-accurate (not AI-redrawn) | Compose pipeline uses real files from `brand_kit/`; QA rubric item "product accuracy" ≥ threshold; manual visual check |
+| S2 | Product photos, logo, packaging, labels are pixel-accurate (not AI-redrawn) | Compose pipeline uses the real files in `runs/<id>/inputs/`; QA rubric item "product accuracy" ≥ threshold; manual visual check |
 | S3 | No invented product properties, prices or quotes | Plan/caption prompts restricted to facts in `analysis.json` tagged `verified`; QA rubric item "no invented facts"; manual check against source URLs |
 | S4 | Brand analysis cites specific URLs/examples, separates verified / assumption / unavailable | `analysis.json` schema enforces a `status` + `source` per fact; `analysis.md` rendering |
 | S5 | The process re-runs end to end from the UI; any stage can be resumed | `docker compose up`, "Start run" and "Re-run from here" in the UI; resumability tested in M7 (ADR-027) |
@@ -64,7 +64,7 @@ Related docs: [DECISIONS.md](./DECISIONS.md) (ADRs) · [TIMELOG.md](./TIMELOG.md
 brief.yaml + uploads ─► 01 Brief ─► brief.json
 brief.json + screenshots + site (web_search) ─► 02 Analysis ─► analysis.json / analysis.md
 analysis.json + brief.json ─► 03 Plan ─► plan.json / plan.md
-plan.json + brand_kit assets ─► 04 Create ─► slides/*.png, captions.json, image_prompts.json
+plan.json + inputs/ files ─► 04 Create ─► slides/*.png, captions.json, image_prompts.json
 slides + plan + analysis ─► 05 Review ─► review.json (+ ≤1 regeneration per failing slide) ─► posts.zip
 every AI call ─► ai_calls ─► cost_report.json
 ```
@@ -78,7 +78,7 @@ every AI call ─► ai_calls ─► cost_report.json
 | 01 | Brief | Free-text description in the UI, turned into brief YAML by `POST /api/brief/draft` and checked by the person (ADR-029); uploaded logo, product images, Instagram screenshots, reference links | Validates with Zod; normalises URLs; copies/registers assets; records which assets exist (logo, N products with names, N screenshots); asks for missing required fields (validation errors shown in the UI) | Normalised brief | `01_brief/brief.json`, `assets` rows |
 | 02 | Analysis | `brief.json`, screenshots, brand site | (a) Site research via Responses API + `web_search` restricted to the brand domain(s) → product facts with URLs; (b) vision model over Instagram screenshots → tone, themes, visual style, HEX colours, how products/people are shown; (c) merge into one structured analysis. Every fact: `status: verified \| assumption \| unavailable`, `source` (URL or screenshot filename), `evidence` | Brand analysis | `02_analysis/analysis.json`, `analysis.md`, `sources.json` |
 | 03 | Plan | `analysis.json`, `brief.json` | Plans 3 posts: goal (educate / engagement / saves / product intro / purchase intent), format (single / carousel), concept, rationale tied to analysis, slide list with on-image text, product asset per slide, caption (English), hashtags. Only `verified` facts may appear as claims | Content plan | `03_plan/plan.json`, `plan.md` |
-| 04 | Create | `plan.json`, `analysis.json` (colours, style), `brand_kit/` | Per slide: build background prompt (scene without product/logo/text) → image model → `sharp` composite: background + real product cut-out (shadow, scale, placement) + real logo + headline/body text as SVG with brand font → 1080×1350 PNG. Final caption polish. | Finished slides & captions | `04_create/post_<n>/slide_<k>.png`, `captions.json`, `image_prompts.json`, `compose_specs.json` |
+| 04 | Create | `plan.json`, `analysis.json` (colours, style), `inputs/` | Per slide: build background prompt (scene without product/logo/text) → image model → `sharp` composite: background + real product cut-out (shadow, scale, placement) + real logo + headline/body text as SVG with brand font → 1080×1350 PNG. Final caption polish. | Finished slides & captions | `04_create/post_<n>/slide_<k>.png`, `captions.json`, `image_prompts.json`, `compose_specs.json` |
 | 05 | Review | slides, `plan.json`, `analysis.json` | Vision QA per slide + per post against rubric: brand fit, readability/contrast, product accuracy (compared with reference photo), goal fit, no invented facts (caption vs verified facts). Score < threshold → regenerate that slide once (new seed / prompt fix from QA feedback) → re-score. Packages final posts. | QA report + final package | `05_review/review.json`, `review.md`, `posts.zip`, `cost_report.json` |
 
 Resumability: each stage reads only files from earlier stage folders; a stage is "done" when its artifact exists and validates against its Zod schema and the DB/state marks it `succeeded`. "Re-run from here" (`fromStage`) deletes/overwrites stage ≥ N artifacts and keeps earlier ones.
@@ -240,8 +240,8 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | R5 | Ask audience | Form field + `brief.audience` |
 | R6 | Ask goals | Form field + `brief.goals[]` |
 | R7 | Ask references / inspiration | Form field + `brief.references[]` (links) |
-| R8 | Allow links or uploads of product images, logos, other references, if the approach uses them | UI uploads; collection from the brand's website with vision checks (ADR-030); `brand_kit/<brand>/` as the base |
-| R9 | Prepare and attach own brief answers and inputs for the demo | `brief.example.yaml`, `brand_kit/gymbeamhr/` (+ `SOURCES.md`), copied into `runs/<final>/01_brief/` |
+| R8 | Allow links or uploads of product images, logos, other references, if the approach uses them | Per-run uploads shown as tiles (ADR-033); collection from the brand's website with vision checks (ADR-030) |
+| R9 | Prepare and attach own brief answers and inputs for the demo | `PROMPT.md`, `brief.example.yaml`, `examples/gymbeamhr/`, copied into `runs/<final>/inputs/` (ADR-033) |
 | R10 | Study Instagram posts: tone, audience, themes, style, colours, product & people presentation | Stage 02 vision analysis of screenshots → `analysis.json` fields `tone`, `audience`, `content_pillars`, `visual_style`, `colors_hex`, `product_presentation`, `people_presentation` |
 | R11 | Use official site / shop / catalogue for facts | Stage 02 `web_search` scoped to gymbeam.hr; `sources.json` |
 | R12 | Cite specific links and examples supporting conclusions | `Fact.source` (URL or screenshot file) + `evidence`; `analysis.md` |
@@ -266,7 +266,7 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | R31 | Include key intermediate results: analysis, plan, generation prompts | `analysis.json/.md`, `plan.json/.md`, `image_prompts.json`, `compose_specs.json`, `review.json` in `runs/<final>/` |
 | R32 | Resume from a saved phase after interruption | Artifact-per-stage + `steps` status; server requeues stale jobs; UI "Rerun from this stage" |
 | R33 | Deliver 3 posts: media + texts with format, goal, short rationale | `posts.zip` incl. `POSTS.md` (format/goal/rationale per post) |
-| R34 | State Instagram profile, sources, input references needed to repeat | `PROMPT.md` (starting prompt) / brief YAML, `brand_kit/gymbeamhr/` with `sources.json` (ADR-030), `sources.json` per run, PDF |
+| R34 | State Instagram profile, sources, input references needed to repeat | `PROMPT.md` (starting prompt) / brief YAML, `examples/gymbeamhr/`, `runs/<id>/inputs/` with `sources.json` (ADR-030, ADR-033), `sources.json` per run, PDF |
 | R35 | Recipe actually used: prompts or code (+ app link if any) | Repo; prompts in `packages/core/src/prompts/`; README run guide |
 | R36 | Start prompt/command | `PROMPT.md` (the starting prompt) + README + PDF: `docker compose up`, "Load the GymBeam example" → "Prepare brief" → "Start run" |
 | R37 | Tools and models | README "Tools & models"; `.env.example`; `runs/<id>/config.json` snapshot |
@@ -298,7 +298,7 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | Vacancy point | Feature in this project |
 |---|---|
 | Products connecting AI agents, brand analysis, image generation | Whole pipeline: web_search research agent → vision brand analysis → plan → image generation + compose |
-| Turning a process run on real brands into a standalone app | One core pipeline behind the web app and API; parameterised by brand (`brand_kit/<slug>`) |
+| Turning a process run on real brands into a standalone app | One core pipeline behind the web app and API; parameterised by brand (brief + per-run input files) |
 | Backend + web app, architecture | Fastify + SQLite/Drizzle + React/Vite monorepo; ADRs in DECISIONS.md |
 | Connect AI models and agentic processes into a reliable product | Retries, timeouts, schema-validated outputs, resumable stages, job queue with requeue on restart |
 | Generation, analysis and quality checking of images | Stage 04 generation/compose, stage 05 vision QA rubric + regeneration |
@@ -321,7 +321,7 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Instagram blocks automated access (login wall, rate limits) | No brand visual data | Human action: 6–10 screenshots in `brand_kit/gymbeamhr/instagram/` or UI upload; analysis records Instagram as "accessed via screenshots" and lists direct access under `unavailable_sources` |
+| Instagram blocks automated access (login wall, rate limits) | No brand visual data | Human action: 6–10 screenshots uploaded in the UI; analysis records Instagram as "accessed via screenshots" and lists direct access under `unavailable_sources` |
 | Image model distorts logo, packaging, label text | Fails accuracy requirement | Never generate product/logo/text: background-only prompts with explicit negatives; real assets composited by `sharp`; text rendered as SVG; QA "product accuracy"; experiment documents why |
 | Composited product looks pasted-in | Lower quality | Prompt reserves a surface/placement area and lighting direction; soft contact shadow, scale per layout, slight colour-temperature match; QA brand-fit check; template per layout |
 | Hallucinated facts (claims, prices, ingredients, quotes) | Fails "don't invent" requirement | Facts only from site via `web_search` with URL; plan/caption may only reference `verified` fact IDs; prices verified or user-confirmed (ADR-018), no quotes; QA caption fact mapping; manual M8 check |
@@ -344,7 +344,7 @@ Checked in the browser with mock AI (2026-10-30): run started from the form with
 | Redis / BullMQ | Extra infra for a single-process app | ADR-007 (swap queue adapter when scaling) |
 | Docker / cloud deploy | Not required; local `pnpm` start is simpler to review | PDF improvements; README |
 | LoRA training | Time/cost; compose already guarantees packaging accuracy | ADR-012; PDF improvement proposal (fal.ai / Replicate Flux LoRA on GymBeam packaging) |
-| Second-brand evaluation | Time | PDF: recipe is parameterised by brand (`brand_kit/<slug>`, brief) |
+| Second-brand evaluation | Time | PDF: recipe is parameterised by brand (brief, per-run input files) |
 | Instagram API / publishing | Demo only, per assignment | README |
 | Automated Instagram scraping | ToS / blocking | ADR-005; screenshots as human action |
 | Consistent recurring people/influencers | Not required; avoids identity drift | PDF limitations |
@@ -362,7 +362,7 @@ Invitation received → deadline 7 days later (exact date to be filled in from t
 
 - [ ] Instagram profile stated: https://www.instagram.com/gymbeamhr/ + why this brand
 - [ ] Post 1, Post 2, Post 3 — PNGs (all carousel slides in order), caption (HR + EN gloss), format, goal, rationale (`posts.zip` with `POSTS.md`)
-- [ ] Sources and input references: `brief.example.yaml`, `brand_kit/gymbeamhr/` + `SOURCES.md`, `sources.json`
+- [ ] Sources and input references: `PROMPT.md`, `brief.example.yaml`, `examples/gymbeamhr/`, `runs/<final>/inputs/` + `sources.json`
 - [ ] Intermediate results of the final run: `analysis.json/.md`, `plan.json/.md`, `image_prompts.json`, `review.json`, `cost_report.json`
 - [ ] Recipe: GitHub link (or ZIP) with code + prompts; app run instructions (Docker)
 - [ ] Start command, tools, models, settings, human actions — in README and PDF
