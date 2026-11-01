@@ -42,6 +42,21 @@ describe('server', () => {
     expect((await app.inject({ url: '/api/health' })).json()).toMatchObject({ provider: 'openai', openaiKeySet: false });
   });
 
+  it('prepares a brief from free text and records the request and its AI call in the run', async () => {
+    const { app } = await setup();
+    const res = await app.inject({ method: 'POST', url: '/api/brief/draft', payload: { text: 'Posts for GymBeam' } });
+    expect(res.statusCode).toBe(200);
+    const draft = res.json<{ draftId: string; yaml: string; missing: string[]; brief: { brand: { slug: string } } | null }>();
+    expect(draft.missing).toEqual([]);
+    expect(draft.brief?.brand.slug).toBe('gymbeamhr');
+
+    const created = await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml: draft.yaml, draftId: draft.draftId } });
+    const { runId } = created.json<{ runId: string }>();
+    expect((await app.inject(`/api/runs/${runId}/files/01_brief/request.txt`)).body).toBe('Posts for GymBeam');
+    const costs = (await app.inject(`/api/runs/${runId}/costs`)).json<{ totals: { calls: number } }>();
+    expect(costs.totals.calls).toBe(1);
+  });
+
   it('creates a run, processes the queued job end to end and serves posts, files, costs and the zip', async () => {
     const { app, worker } = await setup();
     const created = await app.inject({ method: 'POST', url: '/api/runs', payload: { briefYaml } });

@@ -8,6 +8,7 @@
  */
 import type { MockFixtures, Source } from '../ai/types.js';
 import type { InstagramAnalysisModel, SiteAnalysisModel } from '../schemas/analysis.js';
+import type { BriefDraftModel } from '../schemas/brief-draft.js';
 import type { ContentPlanModel } from '../schemas/plan.js';
 import type { CaptionReviewModel, SlideReviewModel } from '../schemas/review.js';
 
@@ -188,7 +189,30 @@ export const captionReviewFixture = {
   verdict: 'ok',
 } satisfies CaptionReviewModel;
 
+/** Mock brief draft: always the GymBeam example, whatever the request says. */
+export const briefDraftFixture = {
+  brand: {
+    name: 'GymBeam Croatia',
+    instagramHandle: '@gymbeamhr',
+    website: 'https://gymbeam.hr',
+    shopUrls: [],
+    whyThisBrand: '[MOCK] Active brand on the Croatian market with a large public catalogue and clean packshots.',
+  },
+  products: [
+    { name: 'GymBeam True Whey Protein', url: null, imageFile: null, notes: 'Flagship whey protein.' },
+    { name: 'GymBeam Creatine Monohydrate', url: null, imageFile: null, notes: 'Educational angle.' },
+    { name: 'GymBeam Protein Bar', url: null, imageFile: null, notes: 'Snack, on the go.' },
+  ],
+  audience: '[MOCK] Adults in Croatia (18–40) who train regularly and buy supplements online.',
+  goals: ['Education: earn saves', 'Engagement: spark comments', 'Purchase intent: clear call to action to the shop'],
+  references: [{ url: 'https://www.instagram.com/gymbeamhr/', note: 'The brand feed, the main style reference.' }],
+  constraints: ['No discounts or promotions unless verified on the official site.'],
+  notes: null,
+  assumptions: [{ field: 'audience', value: '[MOCK] Adults in Croatia (18–40) who train regularly and buy supplements online.' }],
+} satisfies BriefDraftModel;
+
 export const mockFixtures: MockFixtures = {
+  'brief.intake': briefDraftFixture,
   'analysis.site': { ...siteFixture, __sources: siteFixtureSources },
   'analysis.instagram': instagramFixture,
   plan: planFixture,

@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
-import { api, type OpenAiCheck } from './api.ts';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { api, type BriefDraft, type OpenAiCheck } from './api.ts';
 
 function FilePicker(props: { name: string; label: string; hint: string; multiple?: boolean; files: File[]; onChange: (f: File[]) => void }) {
   return (
@@ -81,29 +81,173 @@ function OpenAiSetup() {
   );
 }
 
+const DESCRIBE_HINT = `For example: Three posts for GymBeam Croatia (@gymbeamhr), website gymbeam.hr. Products: True Whey Protein and Creatine Monohydrate. Audience: people in Croatia who train regularly. Goals: one educational post, one that gets comments, one that sells. No discounts.`;
+
+const FIELD_LABEL: Record<string, string> = { whyThisBrand: 'Why this brand', audience: 'Audience', goals: 'Goals' };
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="grid gap-1 sm:grid-cols-[9rem_1fr]">
+      <dt className="text-xs font-semibold text-ink-soft">{label}</dt>
+      <dd className="text-sm">{children}</dd>
+    </div>
+  );
+}
+
+/** What the recipe understood from the description, for the person to check before starting. */
+function BriefCard({ draft, stale }: { draft: BriefDraft; stale: boolean }) {
+  const b = draft.brief;
+  const blocked = draft.missing.length > 0 || draft.issues.length > 0;
+  return (
+    <section aria-labelledby="draft-title" className={`mt-6 rounded-md bg-paper px-5 py-4 shadow-[0_1px_0_var(--color-rule)] ${stale ? 'opacity-60' : ''}`}>
+      <h2 id="draft-title" className="font-semibold">
+        {blocked ? 'The brief is not complete yet' : 'Check the brief'}
+      </h2>
+      {stale && <p className="mt-1 text-sm text-pencil">The description changed. Prepare the brief again before starting.</p>}
+
+      {draft.missing.length > 0 && (
+        <div className="mt-3 rounded-md border-l-4 border-pencil bg-pencil/5 px-4 py-2 text-sm">
+          <p className="font-semibold text-pencil">Add to the description:</p>
+          <ul className="mt-1 list-disc pl-5">
+            {draft.missing.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {draft.issues.length > 0 && (
+        <ul className="mt-3 list-disc pl-5 text-sm text-pencil">
+          {draft.issues.map((i) => (
+            <li key={i}>{i}</li>
+          ))}
+        </ul>
+      )}
+
+      {b && (
+        <dl className="mt-4 space-y-2">
+          <Field label="Brand">{b.brand.name}</Field>
+          <Field label="Instagram">
+            <a href={b.brand.instagramUrl} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+              {b.brand.instagramHandle}
+            </a>
+          </Field>
+          <Field label="Website">
+            {[b.brand.website, ...b.brand.shopUrls].join(', ')}
+            <span className="block text-xs text-ink-soft">Facts and prices are taken only from these sites.</span>
+          </Field>
+          <Field label="Brand kit">
+            <span className="font-mono text-xs">brand_kit/{b.brand.slug}/</span>
+          </Field>
+          <Field label="Products">
+            <ul className="space-y-1">
+              {b.products.map((p) => (
+                <li key={p.name}>
+                  {p.name}
+                  <span className="block text-xs text-ink-soft">
+                    {p.url ?? 'page will be found on the website'} · {p.imageFile ? `photo ${p.imageFile}` : 'no photo matched'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Field>
+          <Field label="Audience">{b.audience}</Field>
+          <Field label="Goals">
+            <ul className="list-disc pl-4">
+              {b.goals.map((g) => (
+                <li key={g}>{g}</li>
+              ))}
+            </ul>
+          </Field>
+          <Field label="Why this brand">{b.brand.whyThisBrand}</Field>
+          {b.notes && <Field label="Notes">{b.notes}</Field>}
+          <Field label="Rules">
+            <details>
+              <summary className="cursor-pointer text-ink-soft">{b.constraints.length} rules, including the standard ones</summary>
+              <ul className="mt-1 list-disc pl-4">
+                {b.constraints.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </details>
+          </Field>
+        </dl>
+      )}
+
+      {draft.assumptions.length > 0 && (
+        <div className="mt-4 text-sm">
+          <p className="font-semibold">Proposed by the AI, not in your description</p>
+          <ul className="mt-1 list-disc pl-5 text-ink-soft">
+            {draft.assumptions.map((a) => (
+              <li key={a.field}>
+                <span className="font-medium text-ink">{FIELD_LABEL[a.field] ?? a.field}</span>: {a.value}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-xs text-ink-faint">If any of this is wrong, say it in the description and prepare the brief again.</p>
+        </div>
+      )}
+      {draft.warnings.length > 0 && (
+        <ul className="mt-3 list-disc pl-5 text-xs text-ink-soft">
+          {draft.warnings.map((w) => (
+            <li key={w}>{w}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
-  const [brief, setBrief] = useState('');
+  const [text, setText] = useState('');
+  const [draft, setDraft] = useState<BriefDraft | null>(null);
+  const [draftedFrom, setDraftedFrom] = useState('');
+  const [yaml, setYaml] = useState('');
+  const [showYaml, setShowYaml] = useState(false);
   const [logo, setLogo] = useState<File[]>([]);
   const [products, setProducts] = useState<File[]>([]);
   const [screenshots, setScreenshots] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Product photos take part in the brief (matched to products), so new uploads also need a new draft.
+  const draftKey = `${text.trim()}\n${products.map((f) => f.name).join('\n')}`;
+  const stale = draft !== null && draftKey !== draftedFrom;
+  const yamlEdited = draft !== null && yaml !== draft.yaml;
+  const ready = draft !== null && !stale && (yamlEdited || (draft.missing.length === 0 && draft.issues.length === 0));
 
   const loadExample = async () => {
     setError(null);
     try {
-      setBrief(await api.exampleBrief());
+      setText(await api.exampleRequest());
     } catch (e) {
       setError((e as Error).message);
     }
   };
 
+  const prepare = async () => {
+    setPreparing(true);
+    setError(null);
+    try {
+      const d = await api.draftBrief(text, products.map((f) => f.name));
+      setDraft(d);
+      setYaml(d.yaml);
+      setDraftedFrom(draftKey);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPreparing(false);
+    }
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (!draft) return;
     setBusy(true);
     setError(null);
     const form = new FormData();
-    form.append('brief', brief);
+    form.append('brief', yaml);
+    form.append('draftId', draft.draftId);
     for (const f of logo) form.append('logo', f);
     for (const f of products) form.append('products', f);
     for (const f of screenshots) form.append('screenshots', f);
@@ -126,24 +270,59 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
       </p>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_20rem]">
-        <section aria-labelledby="brief-label">
-          <div className="flex items-baseline justify-between">
-            <label id="brief-label" htmlFor="brief" className="text-sm font-semibold">
-              Brief (YAML)
-            </label>
-            <button type="button" onClick={loadExample} className="text-sm font-medium text-active underline underline-offset-2">
-              Load the GymBeam example
+        <div>
+          <section aria-labelledby="describe-label">
+            <div className="flex items-baseline justify-between gap-4">
+              <label id="describe-label" htmlFor="describe" className="text-sm font-semibold">
+                Describe the brand and the posts you want
+              </label>
+              <button type="button" onClick={loadExample} className="shrink-0 text-sm font-medium text-active underline underline-offset-2">
+                Load the GymBeam example
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-ink-soft">
+              Name the brand, its Instagram account and website, the products to promote, who the posts are for, what they should achieve, and any
+              references or inspiration (links). Write it any way you like.
+            </p>
+            <textarea
+              id="describe"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={DESCRIBE_HINT}
+              className="mt-2 h-64 w-full resize-y rounded-md border border-rule bg-paper p-4 text-sm leading-relaxed"
+            />
+            <button
+              type="button"
+              onClick={() => void prepare()}
+              disabled={preparing || !text.trim()}
+              className="mt-3 rounded-md border border-ink px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {preparing ? 'Reading the description…' : draft ? 'Prepare the brief again' : 'Prepare brief'}
             </button>
-          </div>
-          <textarea
-            id="brief"
-            value={brief}
-            onChange={(e) => setBrief(e.target.value)}
-            spellCheck={false}
-            placeholder="brand:&#10;  name: …&#10;  slug: …"
-            className="mt-2 h-[28rem] w-full resize-y rounded-md border border-rule bg-paper p-4 font-mono text-[13px] leading-relaxed"
-          />
-        </section>
+          </section>
+
+          {draft && <BriefCard draft={draft} stale={stale} />}
+
+          {draft && (
+            <div className="mt-3">
+              <button type="button" onClick={() => setShowYaml((v) => !v)} className="text-sm font-medium text-ink-soft underline underline-offset-2">
+                {showYaml ? 'Hide the brief as YAML' : 'Edit the brief as YAML'}
+              </button>
+              {showYaml && (
+                <>
+                  <textarea
+                    aria-label="Brief as YAML"
+                    value={yaml}
+                    onChange={(e) => setYaml(e.target.value)}
+                    spellCheck={false}
+                    className="mt-2 h-80 w-full resize-y rounded-md border border-rule bg-paper p-4 font-mono text-[13px] leading-relaxed"
+                  />
+                  {yamlEdited && <p className="text-xs text-ink-soft">The run starts from the edited YAML; the card above shows the prepared version.</p>}
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="space-y-6">
           <OpenAiSetup />
@@ -156,7 +335,7 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
             <FilePicker
               name="products"
               label="Product photos"
-              hint="File names must match imageFile in the brief"
+              hint="Matched to products by file name when the brief is prepared"
               multiple
               files={products}
               onChange={setProducts}
@@ -174,7 +353,7 @@ export function NewRun({ onCreated }: { onCreated: (runId: string) => void }) {
 
       <button
         type="submit"
-        disabled={busy || !brief.trim()}
+        disabled={busy || !ready}
         className="mt-8 rounded-md bg-ink px-6 py-3 font-semibold text-paper disabled:cursor-not-allowed disabled:opacity-40"
       >
         {busy ? 'Starting…' : 'Start run'}

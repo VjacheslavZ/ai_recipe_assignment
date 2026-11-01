@@ -41,6 +41,9 @@ export {
   slideScore,
   DEFAULT_FONT,
   buildInstagramText,
+  draftBrief,
+  draftToBriefInput,
+  slugFromHandle,
 } from './stages/index.js';
-export type { MergeInput, CaptionRecord, ImagePromptRecord } from './stages/index.js';
+export type { MergeInput, CaptionRecord, ImagePromptRecord, BriefDraft, DraftBriefOptions } from './stages/index.js';
 export * from './compose/compose.js';

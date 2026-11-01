@@ -12,6 +12,8 @@ export { checkCaptionPrices, revisionPrompt, slideScore } from './05-review.js';
 export { DEFAULT_FONT, buildInstagramText } from './04-create.js';
 export type { CaptionRecord, ImagePromptRecord } from './04-create.js';
 export { BRIEF_INPUT_FILE, checkBrandKit, listInstagramScreenshots, parseBriefYaml } from './01-brief.js';
+export { draftBrief, draftToBriefInput, slugFromHandle } from './brief-intake.js';
+export type { BriefDraft, DraftBriefOptions } from './brief-intake.js';
 export { confirmPrices, mergeAnalysis, parsePriceAnswer, INSTAGRAM_NO_SCREENSHOTS_REASON } from './02-analysis.js';
 export type { MergeInput } from './02-analysis.js';
 export { PlanValidationError, validatePlan } from './03-plan.js';

@@ -6,17 +6,21 @@ import {
   BriefValidationError,
   checkOpenAiSetup,
   ContentPlanSchema,
+  createAiClient,
+  draftBrief,
+  mockFixtures,
   parseBriefYaml,
   ReviewSchema,
   RunStore,
   STAGES,
+  type AiCallRecord,
   type CaptionRecord,
   type Config,
   type Stage,
 } from '@recipe/core';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { desc, eq } from 'drizzle-orm';
-import { runs, type Db } from './db.js';
+import { aiCalls, runs, type Db } from './db.js';
 import type { PendingQuestions, RunEvent, RunEvents } from './events.js';
 import { enqueueRun, type JobWorker } from './worker.js';
 
@@ -102,20 +106,47 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return readFileSync(path.join(config.rootDir, 'brief.example.yaml'), 'utf8');
   });
 
+  app.get('/api/example-request', async (_req, reply) => {
+    reply.type('text/plain; charset=utf-8');
+    return readFileSync(path.join(config.rootDir, 'brief.example.txt'), 'utf8');
+  });
+
+  // Free-text requests turned into briefs, kept until the run starts so the run records the
+  // request and the cost of that AI call. In memory: a restart only loses unstarted drafts.
+  const drafts = new Map<string, { text: string; call: AiCallRecord }>();
+
+  /** Free text → brief for the person to check (one cheap text-model call). */
+  app.post('/api/brief/draft', async (req, reply) => {
+    const body = (req.body ?? {}) as { text?: string; productFiles?: string[] };
+    if (!body.text?.trim()) return reply.code(400).send({ error: 'describe the brand and the posts you want' });
+    if (config.AI_PROVIDER === 'openai' && !config.OPENAI_API_KEY) {
+      return reply.code(400).send({ error: 'OPENAI_API_KEY is not set. Add it to .env and run: docker compose restart server' });
+    }
+    const ai = createAiClient(config, { fixtures: mockFixtures });
+    const draft = await draftBrief(ai, { text: body.text, brandKitDir: config.BRAND_KIT_DIR, uploadedProductFiles: body.productFiles ?? [] });
+    app.log.info({ purpose: draft.call.purpose, model: draft.call.model, costUsd: draft.call.costUsd }, 'brief draft');
+    const draftId = draft.call.id;
+    drafts.set(draftId, { text: body.text, call: draft.call });
+    if (drafts.size > 50) drafts.delete(drafts.keys().next().value!);
+    return { ...draft, draftId };
+  });
+
   /**
    * Create a run. JSON `{ briefYaml }` or multipart: field `brief` (YAML) and files
    * `logo`, `products` (file names must match `imageFile` in the brief), `screenshots`.
    */
   app.post('/api/runs', async (req, reply) => {
     let briefYaml: string | undefined;
+    let draftId: string | undefined;
     const uploads: { field: string; filename: string; data: Buffer }[] = [];
     if (req.isMultipart()) {
       for await (const part of req.parts()) {
         if (part.type === 'file') uploads.push({ field: part.fieldname, filename: part.filename, data: await part.toBuffer() });
         else if (part.fieldname === 'brief') briefYaml = String(part.value);
+        else if (part.fieldname === 'draftId') draftId = String(part.value);
       }
     } else {
-      briefYaml = (req.body as { briefYaml?: string } | undefined)?.briefYaml;
+      ({ briefYaml, draftId } = (req.body ?? {}) as { briefYaml?: string; draftId?: string });
     }
     if (!briefYaml?.trim()) return reply.code(400).send({ error: 'brief YAML is required (field "brief" or JSON "briefYaml")' });
     // Fail here, not minutes later in stage 2.
@@ -156,6 +187,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     db.insert(runs)
       .values({ id: store.runId, brandSlug: slug, status: 'queued', runDir: store.runDir, brandKitDir, provider: config.AI_PROVIDER, createdAt: new Date().toISOString() })
       .run();
+    // The request the brief was prepared from, and the cost of preparing it, belong to the run.
+    const draft = draftId ? drafts.get(draftId) : undefined;
+    if (draft) {
+      store.writeText('brief', 'request.txt', draft.text);
+      store.recordAiCall(draft.call);
+      db.insert(aiCalls).values({ ...draft.call, runId: store.runId, error: draft.call.error ?? null }).onConflictDoNothing().run();
+      drafts.delete(draftId!);
+    }
     enqueueRun(db, store.runId);
     events.publish(store.runId, { type: 'run', status: 'queued' });
     return reply.code(201).send({ runId: store.runId });

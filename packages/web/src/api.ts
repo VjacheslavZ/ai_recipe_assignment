@@ -144,10 +144,32 @@ export interface OpenAiCheck {
   models: ModelCheck[];
 }
 
+export interface BriefView {
+  brand: { name: string; slug: string; instagramHandle: string; instagramUrl: string; website: string; shopUrls: string[]; whyThisBrand: string };
+  products: { name: string; url: string | null; imageFile: string | null; notes: string | null }[];
+  audience: string;
+  goals: string[];
+  references: { url: string | null; file: string | null; note: string | null }[];
+  constraints: string[];
+  notes: string | null;
+}
+
+export interface BriefDraft {
+  draftId: string;
+  yaml: string;
+  brief: BriefView | null;
+  missing: string[];
+  issues: string[];
+  warnings: string[];
+  assumptions: { field: string; value: string }[];
+}
+
 export const api = {
   health: () => request<{ ok: boolean; provider: string; openaiKeySet: boolean }>('/api/health'),
   checkOpenAi: () => request<OpenAiCheck>('/api/openai/check'),
   exampleBrief: () => request<string>('/api/example-brief'),
+  exampleRequest: () => request<string>('/api/example-request'),
+  draftBrief: (text: string, productFiles: string[]) => request<BriefDraft>('/api/brief/draft', json({ text, productFiles })),
   listRuns: () => request<RunRow[]>('/api/runs'),
   getRun: (id: string) => request<RunDetail>(`/api/runs/${id}`),
   createRun: (form: FormData) => request<{ runId: string }>('/api/runs', { method: 'POST', body: form }),
