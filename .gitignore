@@ -17,10 +17,10 @@ data/*
 *.db-wal
 *.db-shm
 
-# Pipeline runs: the final demo run in runs/<runId>/ IS committed later as
-# part of the submission, so we only ignore scratch/experimental runs.
-runs/_tmp/
-runs/_scratch/
+# Pipeline runs: ignored; the final demo run is committed as part of the
+# submission by adding an exception for it here (!runs/<runId>/).
+runs/*
+!runs/.gitkeep
 
 # OS / editors
 .DS_Store

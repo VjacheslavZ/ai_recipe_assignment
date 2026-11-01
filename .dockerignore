@@ -6,7 +6,7 @@
 .env.*
 data
 runs
-brand_kit
+examples
 docs
 *.pdf
 AI_Recipe_Assignment.md
