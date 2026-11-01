@@ -102,6 +102,11 @@ export function validatePlan(raw: ContentPlanModel, analysis: BrandAnalysis): { 
   return { plan: ContentPlanSchema.parse({ summary: raw.summary, posts }), fixes };
 }
 
+/** Appended to the plan input when the first plan broke the rules. */
+export function planCorrectionNote(violations: string[]): string {
+  return `# Your previous plan was rejected\nFix these problems and return the whole corrected plan:\n${violations.map((v) => `- ${v}`).join('\n')}`;
+}
+
 export const planStage: StageDefinition = {
   no: 3,
   id: 'plan',
@@ -111,17 +116,27 @@ export const planStage: StageDefinition = {
     const analysis = ctx.store.readJson('analysis', 'analysis.json', BrandAnalysisSchema);
 
     const prompt = buildPlanPrompt({ brief, analysis });
-    ctx.store.writeJson('plan', 'prompts.json', [{ purpose: 'plan', version: PLAN_PROMPT_VERSION, ...prompt }]);
+    const prompts = [{ purpose: 'plan', version: PLAN_PROMPT_VERSION, ...prompt }];
+    ctx.store.writeJson('plan', 'prompts.json', prompts);
 
-    const res = await ctx.ai.structured({
-      purpose: 'plan',
-      schema: ContentPlanModelSchema,
-      schemaName: 'content_plan',
-      ...prompt,
-      model: 'text',
-    });
+    const ask = (purpose: string, input: string) =>
+      ctx.ai.structured({ purpose, schema: ContentPlanModelSchema, schemaName: 'content_plan', system: prompt.system, input, model: 'text' });
 
-    const { plan, fixes } = validatePlan(res.data, analysis);
+    let res = await ask('plan', prompt.input);
+    let validated: ReturnType<typeof validatePlan>;
+    try {
+      validated = validatePlan(res.data, analysis);
+    } catch (err) {
+      if (!(err instanceof PlanValidationError)) throw err;
+      // One correction round: the model gets its rule violations back. A second failure stops the run.
+      ctx.log(`plan rejected (${err.violations.join('; ')}) — asking the model to correct it`);
+      const retryInput = `${prompt.input}\n\n${planCorrectionNote(err.violations)}`;
+      prompts.push({ purpose: 'plan.retry', version: PLAN_PROMPT_VERSION, system: prompt.system, input: retryInput });
+      ctx.store.writeJson('plan', 'prompts.json', prompts);
+      res = await ask('plan.retry', retryInput);
+      validated = validatePlan(res.data, analysis);
+    }
+    const { plan, fixes } = validated;
     for (const f of fixes) ctx.log(`plan fix: ${f}`);
 
     ctx.store.writeJson('plan', 'plan.json', plan);

@@ -29,12 +29,15 @@ function reducer(state: LiveRun, e: Action): LiveRun {
       return { ...state, status: e.status, error: e.error, stages: e.state.stages, questions: e.questions, revision: state.revision + 1 };
     case 'log':
       return { ...state, log: [...state.log.slice(-499), e.message] };
-    case 'stage':
+    case 'stage': {
+      // A new status replaces the old error: a stage that failed and then passed on a re-run shows no error.
+      const { error: _previous, ...stage } = state.stages[e.stage];
       return {
         ...state,
-        stages: { ...state.stages, [e.stage]: { ...state.stages[e.stage], status: e.status, ...(e.error ? { error: e.error } : {}) } },
+        stages: { ...state.stages, [e.stage]: { ...stage, status: e.status, ...(e.error ? { error: e.error } : {}) } },
         revision: e.status === 'done' ? state.revision + 1 : state.revision,
       };
+    }
     case 'ai_call':
       return { ...state, calls: [...state.calls, e.call] };
     case 'question':

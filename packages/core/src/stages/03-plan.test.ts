@@ -7,7 +7,9 @@ import type { BrandAnalysis } from '../schemas/analysis.js';
 import type { ContentPlanModel } from '../schemas/plan.js';
 import { parseBriefYaml } from './01-brief.js';
 import { mergeAnalysis } from './02-analysis.js';
-import { PlanValidationError, validatePlan } from './03-plan.js';
+import { buildPlanPrompt } from '../prompts/index.js';
+import { PlanValidationError, planStage, validatePlan } from './03-plan.js';
+import { fakeAi, prepareRunThroughPlan } from './test-helpers.js';
 
 const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), FIXTURE_BRIEF), 'utf8'));
 const analysis: BrandAnalysis = mergeAnalysis({
@@ -107,5 +109,36 @@ describe('validatePlan', () => {
     expect(out.posts[0]!.slides[3]!.brandColorsHex).toEqual(['#111111']);
     expect(out.posts[1]!.slides[0]!.layout).toBe('product-center');
     expect(fixes.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('planStage', () => {
+  const withAssumption = () => {
+    const p = plan();
+    p.posts[1]!.factIds.push('F-SITE-04'); // assumption
+    return p;
+  };
+
+  it('lists assumptions without ids, so the model cannot cite them as facts', () => {
+    const { input } = buildPlanPrompt({ brief, analysis });
+    const assumption = analysis.brandFacts.find((f) => f.id === 'F-SITE-04')!;
+    expect(input).toContain(`- ${assumption.statement}`);
+    expect(input).not.toContain('[F-SITE-04]');
+  });
+
+  it('sends the violations back once and uses the corrected plan', async () => {
+    const ai = fakeAi({ plan: withAssumption(), 'plan.retry': plan() });
+    const { ctx } = await prepareRunThroughPlan(ai);
+    await planStage.run(ctx);
+    expect(ai.requests.map((r) => r.purpose)).toEqual(['plan', 'plan.retry']);
+    expect(ai.requests[1]!.input).toMatch(/previous plan was rejected[\s\S]*F-SITE-04/);
+    expect(ctx.logs.some((l) => l.startsWith('plan rejected'))).toBe(true);
+  });
+
+  it('stops when the corrected plan still breaks the rules', async () => {
+    const ai = fakeAi({ plan: withAssumption(), 'plan.retry': withAssumption() });
+    const { ctx } = await prepareRunThroughPlan(ai);
+    await expect(planStage.run(ctx)).rejects.toBeInstanceOf(PlanValidationError);
+    expect(ai.requests).toHaveLength(2);
   });
 });

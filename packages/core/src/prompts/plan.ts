@@ -2,7 +2,7 @@ import type { BrandAnalysis, Fact } from '../schemas/analysis.js';
 import type { Brief } from '../schemas/brief.js';
 import { bullets, sections, type BuiltPrompt } from './shared.js';
 
-export const PLAN_PROMPT_VERSION = 'plan@3';
+export const PLAN_PROMPT_VERSION = 'plan@4';
 
 export interface PlanPromptInput {
   brief: Brief;
@@ -32,7 +32,7 @@ Plan exactly three Instagram posts, numbered 1, 2 and 3. For each choose a goal,
 Prefer a mix of one carousel, one single and one story unless the brief clearly calls for something else. Map the brief's goals onto the posts (goal values: education, engagement, saves, product_intro, purchase_intent).`,
     `## Rules
 ${bullets([
-  'Facts: product properties, numbers and brand claims may only come from the VERIFIED facts listed in the input. List the ids of every fact a post relies on in "factIds". Assumptions are context only — never state them as claims.',
+  'Facts: product properties, numbers and brand claims may only come from the VERIFIED facts listed in the input. List the ids of every fact a post relies on in "factIds"; only ids of verified facts and verified claims exist. Assumptions are context only (they have no ids) — never state them as claims.',
   'No invented properties, health promises, discounts, prices or quotes. If no verified fact supports a claim, do not make it; write benefit-neutral, inviting copy instead.',
   'Prices: set "showPrice": true only for products whose price is marked "price may be shown". Never write a price amount in headlines or captions — the designer renders it from verified data.',
   '"productName" must be exactly one of the product names listed in the input, or null for a slide without a product. Use layout "text-only" when productName is null.',
@@ -90,7 +90,8 @@ Product presentation: ${analysis.productPresentation}
 People presentation: ${analysis.peoplePresentation}
 Caption style: length ${c.length}; emojis ${c.emojis}; hashtags ${c.hashtags}; CTAs ${c.ctaPatterns.join(' | ') || 'unknown'}; language ${c.language}`,
     `# Verified brand facts (usable as claims)\n${verified.map(factLine).join('\n') || '(none)'}`,
-    assumptions.length ? `# Assumptions (context only, not claims)\n${assumptions.map(factLine).join('\n')}` : null,
+    // No ids: an id invites the model to cite an assumption in factIds, which validation rejects.
+    assumptions.length ? `# Assumptions (context only, not claims)\n${assumptions.map((f) => `- ${f.statement}`).join('\n')}` : null,
     `# Products (use these exact names)\n${products}`,
   );
 
