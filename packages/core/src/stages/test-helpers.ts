@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import type { AiCallRecord, AiClient, StructuredRequest } from '../ai/types.js';
+import type { AiCallRecord, AiClient, ImageRequest, StructuredRequest } from '../ai/types.js';
 import { findRepoRoot, parseConfig } from '../config.js';
 import { FIXTURE_BRIEF, instagramFixture, planFixture, siteFixture, siteFixtureSources } from '../fixtures/index.js';
 import type { ContentPlanModel } from '../schemas/plan.js';
@@ -14,22 +14,29 @@ import type { PendingQuestion, StageContext } from '../pipeline/types.js';
 import { RunStore } from '../run/store.js';
 
 /** Minimal AiClient returning fixtures by purpose (honours the `__sources` convention). */
-export function fakeAi(fixtures: Record<string, unknown>): AiClient & { requests: StructuredRequest<unknown>[] } {
+export function fakeAi(fixtures: Record<string, unknown>): AiClient & { requests: StructuredRequest<unknown>[]; imageRequests: ImageRequest[] } {
   const requests: StructuredRequest<unknown>[] = [];
+  const imageRequests: ImageRequest[] = [];
   const call = (purpose: string): AiCallRecord => ({
     id: 'test', purpose, provider: 'mock', model: 'fake', kind: 'text', inputTokens: 0, outputTokens: 0,
     imageCount: 0, webSearchCalls: 0, costUsd: 0, durationMs: 0, status: 'ok', retryCount: 0, startedAt: new Date().toISOString(),
   });
   return {
     requests,
+    imageRequests,
     async structured<T>(req: StructuredRequest<T>) {
       requests.push(req as StructuredRequest<unknown>);
       const { __sources, ...rest } = fixtures[req.purpose] as Record<string, unknown> & { __sources?: { url: string }[] };
       return { data: req.schema.parse(rest), sources: __sources ?? [], call: call(req.purpose) };
     },
     async generateImage(req) {
+      imageRequests.push(req);
       const [width, height] = (req.size ?? '64x64').split('x').map(Number) as [number, number];
-      const png = await sharp({ create: { width, height, channels: 3, background: '#335577' } }).png().toBuffer();
+      // Like a model that respects the mask: an edit keeps the product and paints the rest.
+      const kept = req.edit
+        ? [{ input: await sharp(req.edit.image).removeAlpha().joinChannel(await sharp(req.edit.mask).extractChannel('alpha').png().toBuffer()).png().toBuffer() }]
+        : [];
+      const png = await sharp({ create: { width, height, channels: 3, background: '#335577' } }).composite(kept).png().toBuffer();
       return { png, call: { ...call(req.purpose), kind: 'image', imageCount: 1 } };
     },
   };

@@ -58,6 +58,11 @@ export interface ImageRequest {
   prompt: string;
   size?: string;
   quality?: string;
+  /**
+   * Generate around an existing image instead of from scratch (image edit): PNGs of the requested
+   * size; the mask is opaque where the image must be kept and transparent where the model paints.
+   */
+  edit?: { image: Buffer; mask: Buffer };
 }
 
 export interface ImageResult {

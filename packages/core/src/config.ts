@@ -26,6 +26,8 @@ export const envSchema = z.object({
     .string()
     .regex(/^(\d+x\d+|auto)$/, 'IMAGE_SIZE must be WIDTHxHEIGHT or "auto"')
     .default('1024x1024'),
+  // edit = the image model paints the scene around the real product (RF-001); generate = empty scene, product composited on top.
+  BACKGROUND_MODE: z.enum(['edit', 'generate']).default('edit'),
   QA_SCORE_THRESHOLD: z.coerce.number().min(0).max(10).default(7),
   MAX_REGENERATIONS: z.coerce.number().int().min(0).default(1),
   DATABASE_PATH: z.string().min(1).default('./data/recipe.db'),

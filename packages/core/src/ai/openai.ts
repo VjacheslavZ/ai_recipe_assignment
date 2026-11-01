@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import OpenAI from 'openai';
+import OpenAI, { toFile } from 'openai';
 import { zodTextFormat } from 'openai/helpers/zod';
 import type { Config } from '../config.js';
 import { requireOpenAIKey } from '../config.js';
@@ -169,17 +169,26 @@ export function createOpenAiClient(config: Config, opts: OpenAiClientOptions = {
     async generateImage(req: ImageRequest): Promise<ImageResult> {
       const model = config.OPENAI_IMAGE_MODEL;
       const { value, call } = await tracked({ purpose: req.purpose, model, kind: 'image' }, async () => {
-        const resp = await client.images.generate(
-          {
-            model,
-            prompt: req.prompt,
-            n: 1,
-            size: (req.size ?? config.IMAGE_SIZE) as OpenAI.Images.ImageGenerateParams['size'],
-            quality: (req.quality ?? config.IMAGE_QUALITY) as OpenAI.Images.ImageGenerateParams['quality'],
-            output_format: 'png',
-          },
-          { timeout: IMAGE_TIMEOUT_MS },
-        );
+        const params = {
+          model,
+          prompt: req.prompt,
+          n: 1,
+          size: (req.size ?? config.IMAGE_SIZE) as OpenAI.Images.ImageGenerateParams['size'],
+          quality: (req.quality ?? config.IMAGE_QUALITY) as OpenAI.Images.ImageGenerateParams['quality'],
+          output_format: 'png' as const,
+        };
+        const resp = req.edit
+          ? await client.images.edit(
+              {
+                ...params,
+                size: params.size as OpenAI.Images.ImageEditParams['size'],
+                quality: params.quality as OpenAI.Images.ImageEditParams['quality'],
+                image: await toFile(req.edit.image, 'scene.png', { type: 'image/png' }),
+                mask: await toFile(req.edit.mask, 'mask.png', { type: 'image/png' }),
+              },
+              { timeout: IMAGE_TIMEOUT_MS },
+            )
+          : await client.images.generate(params, { timeout: IMAGE_TIMEOUT_MS });
         const b64 = resp.data?.[0]?.b64_json;
         if (!b64) throw new Error('Image response contained no b64_json data');
         const u = resp.usage;

@@ -24,6 +24,12 @@ export interface ComposeInput {
   /** Shown instead of a product photo when the slide needs a product but the brand kit has none. */
   productPlaceholder: string | null;
   logo: Buffer | null;
+  /**
+   * The background was generated around this product (image edit, see productSceneInput): it is
+   * cropped from the centre so the product lands where the model saw it, and the scene already has
+   * its shadow and light, so no drop shadow is added.
+   */
+  productInScene?: boolean;
   /** Brand colours; the first is used as accent (price badge, text highlight). */
   colorsHex: string[];
   font: string;
@@ -249,6 +255,75 @@ async function fitInto(img: Buffer, box: Box): Promise<{ png: Buffer; left: numb
   };
 }
 
+/** The product cut-out fitted into its layout box: the one placement used by the scene input and by compose. */
+export async function placeProduct(product: Buffer, box: Box) {
+  return fitInto(await cutOutWhite(product), box);
+}
+
+export function parseImageSize(size: string): Canvas | null {
+  const m = /^(\d+)x(\d+)$/.exec(size);
+  return m ? { width: Number(m[1]), height: Number(m[2]) } : null;
+}
+
+/**
+ * Input for generating a background around the real product (OpenAI image edit): a neutral
+ * image of the generated size with the product cut-out exactly where compose will put it after
+ * the centre cover-crop, and a mask that is opaque (keep) on the product and transparent (paint)
+ * everywhere else. Null when the layout has no product or the size is not WIDTHxHEIGHT.
+ */
+export async function productSceneInput(
+  canvas: Canvas,
+  slideLayout: SlideLayout,
+  product: Buffer,
+  imageSize: string,
+): Promise<{ image: Buffer; mask: Buffer } | null> {
+  const box = layoutBoxes(canvas, slideLayout).product;
+  const size = parseImageSize(imageSize);
+  if (!box || !size) return null;
+  const fit = await placeProduct(product, box);
+  // Inverse of resize({ fit: 'cover', position: 'centre' }) from image size to canvas.
+  const scale = Math.max(canvas.width / size.width, canvas.height / size.height);
+  const offsetX = (size.width * scale - canvas.width) / 2;
+  const offsetY = (size.height * scale - canvas.height) / 2;
+  const width = Math.max(1, Math.round(fit.width / scale));
+  const height = Math.max(1, Math.round(fit.height / scale));
+  const left = Math.round((fit.left + offsetX) / scale);
+  const top = Math.round((fit.top + offsetY) / scale);
+  const scaled = await sharp(fit.png).resize(width, height, { fit: 'fill' }).png().toBuffer();
+  const alpha = await sharp(scaled).ensureAlpha().extractChannel('alpha').toBuffer();
+  const keep = await sharp({ create: { width, height, channels: 3, background: '#ffffff' } }).joinChannel(alpha).png().toBuffer();
+  const image = await sharp({ create: { ...size, channels: 3, background: '#808080' } })
+    .composite([{ input: scaled, left, top }])
+    .png()
+    .toBuffer();
+  const mask = await sharp({ create: { ...size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: keep, left, top }])
+    .png()
+    .toBuffer();
+  return { image, mask };
+}
+
+/**
+ * How much the image model changed the product it was asked to keep: mean absolute RGB
+ * difference (0–255) inside the mask, after a light blur so lighting noise does not count.
+ * A model that kept the product scores about 10–15; one that redrew it (often a larger fake
+ * pack behind the real one) scores 90+.
+ */
+export async function productChange(edit: { image: Buffer; mask: Buffer }, output: Buffer): Promise<number> {
+  const { width, height } = await sharp(edit.image).metadata();
+  const pixels = (img: Buffer) => sharp(img).resize(width, height, { fit: 'fill' }).removeAlpha().blur(3).raw().toBuffer();
+  const [a, b] = await Promise.all([pixels(edit.image), pixels(output)]);
+  const mask = await sharp(edit.mask).extractChannel('alpha').raw().toBuffer();
+  let sum = 0;
+  let n = 0;
+  for (let p = 0; p < mask.length; p++) {
+    if (mask[p]! < 250) continue;
+    for (let c = 0; c < 3; c++) sum += Math.abs(a[p * 3 + c]! - b[p * 3 + c]!);
+    n += 3;
+  }
+  return n ? sum / n : 0;
+}
+
 /** Soft drop shadow made from the product's own alpha channel. */
 async function shadowOf(png: Buffer, width: number, height: number): Promise<Buffer> {
   const alpha = await sharp(png).extractChannel('alpha').toBuffer();
@@ -347,7 +422,7 @@ export async function composeSlide(input: ComposeInput): Promise<ComposeResult> 
   const layout = layoutBoxes(canvas, input.layout);
   const accent = pickAccent(input.colorsHex);
   const backdrop = await sharp(input.background)
-    .resize(canvas.width, canvas.height, { fit: 'cover', position: 'attention' })
+    .resize(canvas.width, canvas.height, { fit: 'cover', position: input.productInScene ? 'centre' : 'attention' })
     .composite([{ input: scrim(canvas, layout.text), left: 0, top: 0 }])
     .png()
     .toBuffer();
@@ -356,9 +431,8 @@ export async function composeSlide(input: ComposeInput): Promise<ComposeResult> 
 
   if (layout.product) {
     if (input.product) {
-      const cut = await cutOutWhite(input.product);
-      const fit = await fitInto(cut, layout.product);
-      layers.push({ input: await shadowOf(fit.png, fit.width, fit.height), left: fit.left + 14, top: fit.top + 26 });
+      const fit = await placeProduct(input.product, layout.product);
+      if (!input.productInScene) layers.push({ input: await shadowOf(fit.png, fit.width, fit.height), left: fit.left + 14, top: fit.top + 26 });
       layers.push({ input: fit.png, left: fit.left, top: fit.top });
       placed.push({ element: 'product', box: { left: fit.left, top: fit.top, width: fit.width, height: fit.height } });
     } else if (input.productPlaceholder) {

@@ -120,9 +120,14 @@ export function createMockClient(config: MockConfig, opts: MockClientOptions = {
       const { width, height } = parseSize(req.size ?? config.IMAGE_SIZE);
       const hash = createHash('sha256').update(req.prompt).digest();
       await sleep();
+      // An edit keeps the input image where the mask is opaque (the product), like the real model should.
+      const kept = req.edit
+        ? [{ input: await sharp(req.edit.image).removeAlpha().joinChannel(await sharp(req.edit.mask).extractChannel('alpha').png().toBuffer()).png().toBuffer() }]
+        : [];
       const png = await sharp({
         create: { width, height, channels: 3, background: { r: hash[0] ?? 0, g: hash[1] ?? 0, b: hash[2] ?? 0 } },
       })
+        .composite(kept)
         .png()
         .toBuffer();
       const call = await record({ purpose: req.purpose, model: config.OPENAI_IMAGE_MODEL, kind: 'image' }, startedAt, {

@@ -1,6 +1,6 @@
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
-import { canvasFor, composeSlide, cutOutWhite, formatPrice, layoutBoxes, pickAccent, prepareLogo, type Box, type ComposeInput } from './compose.js';
+import { canvasFor, composeSlide, cutOutWhite, formatPrice, layoutBoxes, pickAccent, prepareLogo, productSceneInput, type Box, type ComposeInput } from './compose.js';
 
 const solid = (width: number, height: number, background: string) =>
   sharp({ create: { width, height, channels: 3, background } }).png().toBuffer();
@@ -144,6 +144,55 @@ describe('cutOutWhite', () => {
     const png = await sharp({ create: { width: 50, height: 50, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer();
     const out = await cutOutWhite(png);
     expect(await sharp(out).metadata()).toMatchObject({ width: 50, height: 50 });
+  });
+});
+
+describe('productSceneInput', () => {
+  it('masks only the product, which then lands exactly on the real product in compose', async () => {
+    for (const [size, layout] of [['1024x1024', 'product-right'], ['1024x1536', 'product-center']] as const) {
+      const scene = (await productSceneInput(canvasFor('carousel'), layout, await packshot(), size))!;
+      const { info, at } = await pixels(scene.mask);
+      expect(`${info.width}x${info.height}`).toBe(size);
+      expect(at(5, 5)[3]).toBe(0);
+      // A "model" that keeps the masked product and paints everything else light grey.
+      const background = await sharp({ create: { width: info.width, height: info.height, channels: 3, background: '#dddddd' } })
+        .composite([{ input: await sharp(scene.image).removeAlpha().joinChannel(await sharp(scene.mask).extractChannel('alpha').png().toBuffer()).png().toBuffer() }])
+        .png()
+        .toBuffer();
+      const res = await composeSlide(await input({ layout, background, productInScene: true, logo: null, headline: 'X', subtext: null }));
+      const box = res.placed.find((p) => p.element === 'product')!.box;
+      const out = await pixels(res.png);
+      // Just outside the real product there is no dark edge of the product in the background (no ghost).
+      for (const [x, y] of [[box.left - 4, box.top + box.height / 2], [box.left + box.width + 3, box.top + box.height / 2], [box.left + box.width / 2, box.top + box.height + 3]] as [number, number][]) {
+        const [r] = out.at(Math.round(x), Math.round(y));
+        expect(r).toBeGreaterThan(60);
+      }
+    }
+  });
+
+  it('returns null for a text-only layout', async () => {
+    expect(await productSceneInput(canvasFor('carousel'), 'text-only', await packshot(), '1024x1024')).toBeNull();
+  });
+});
+
+describe('prepareLogo', () => {
+  it('turns a black logo on white into a white cut-out for a dark backdrop, cropped to the logo', async () => {
+    const { info, at } = await pixels(await prepareLogo(await wordmark(), 0.2));
+    expect([info.width, info.height]).toEqual([220, 60]);
+    expect(at(10, 30)).toEqual([255, 255, 255, 255]);
+    // The gap between the two bars is transparent, not a white box.
+    expect(at(110, 30)[3]).toBe(0);
+  });
+
+  it('paints a one-colour logo black on a light backdrop, whatever its original colours', async () => {
+    const { at } = await pixels(await prepareLogo(await wordmark('#fff', '#000'), 0.9));
+    expect(at(10, 30)).toEqual([0, 0, 0, 255]);
+  });
+
+  it('keeps the colours of a multi-colour logo and removes its white background', async () => {
+    const { at } = await pixels(await prepareLogo(await wordmark('#FF6A00'), 0.2));
+    expect(at(10, 30)).toEqual([255, 106, 0, 255]);
+    expect(at(110, 30)[3]).toBe(0);
   });
 });
 

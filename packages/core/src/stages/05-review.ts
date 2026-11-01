@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { zipSync } from 'fflate';
 import type { StageContext, StageDefinition } from '../pipeline/types.js';
-import { REVIEW_PROMPT_VERSION, buildCaptionReviewPrompt, buildSlideReviewPrompt, isPriceUsable } from '../prompts/index.js';
+import { REVIEW_PROMPT_VERSION, buildBackgroundPrompt, buildCaptionReviewPrompt, buildSlideReviewPrompt, isPriceUsable } from '../prompts/index.js';
 import { BrandAnalysisSchema, type BrandAnalysis } from '../schemas/analysis.js';
 import { BriefArtifactSchema, type BriefArtifact } from '../schemas/brief.js';
 import { ContentPlanSchema } from '../schemas/plan.js';
@@ -16,7 +16,7 @@ import {
   type SlideResult,
   type SlideReviewModel,
 } from '../schemas/review.js';
-import { composeJob, loadBrandAssets, postDir, type BrandAssets, type CaptionRecord, type ComposeSpec, type ImagePromptRecord, type SlideJob } from './04-create.js';
+import { composeJob, loadBrandAssets, paintBackground, postDir, sceneInputFor, type BrandAssets, type CaptionRecord, type ComposeSpec, type ImagePromptRecord, type SlideJob } from './04-create.js';
 import { renderPostsMd, renderReviewMd } from './markdown.js';
 
 /** Mean of the five 1–5 criterion scores mapped to 0–10, so it compares with QA_SCORE_THRESHOLD. */
@@ -114,16 +114,21 @@ export const reviewStage: StageDefinition = {
           const original = prompts.get(key);
           if (!original) break;
           ctx.log(`review: post ${post.number} slide ${slide.index} scored ${attempts.at(-1)!.score} < ${threshold} → regenerating background (attempt ${n})`);
-          const image = await ctx.ai.generateImage({
+          // Same kind of background as the first attempt: painted around the product again when it was.
+          const edit = original.productInScene ? await sceneInputFor(job, assets, 'edit', original.size) : null;
+          const plain = edit ? buildBackgroundPrompt({ slide, format: post.format, analysis }) : original.prompt;
+          const image = await paintBackground(ctx, {
             purpose: `review.regen.p${post.number}s${slide.index}.r${n}`,
             prompt: revisionPrompt(original.prompt, review),
+            plainPrompt: revisionPrompt(plain, review),
             size: original.size,
             quality: original.quality,
+            edit,
           });
           const bgFile = `regenerated/${postDir(post.number)}/bg_${slide.index}_r${n}.png`;
           const slideFile = `regenerated/${postDir(post.number)}/slide_${slide.index}_r${n}.png`;
           ctx.store.writeBuffer('review', bgFile, image.png);
-          const { png } = await composeJob(job, image.png, analysis, assets);
+          const { png } = await composeJob(job, image.png, analysis, assets, image.productInScene);
           ctx.store.writeBuffer('review', slideFile, png);
           review = await reviewSlide(ctx, job, analysis, ctx.store.path('review', slideFile), reference, n);
           attempts.push({ attempt: n, file: `05_review/${slideFile}`, backgroundFile: `05_review/${bgFile}`, ...slideScore(review), issues: review.issues, backgroundFix: review.backgroundFix });
