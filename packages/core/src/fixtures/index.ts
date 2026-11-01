@@ -4,7 +4,7 @@
  * THESE ARE NOT FACTS. They only have a realistic shape so the pipeline can run
  * without an API key. Every statement/evidence is prefixed "[MOCK]", sources point
  * at the shop homepage only, and the one "verified" price is an obvious placeholder.
- * Product names must match `brief.example.yaml`.
+ * Product names must match the test brief `fixtures/brief.yaml` (FIXTURE_BRIEF).
  */
 import type { MockFixtures, Source } from '../ai/types.js';
 import type { InstagramAnalysisModel, SiteAnalysisModel } from '../schemas/analysis.js';
@@ -14,6 +14,9 @@ import type { CaptionReviewModel, SlideReviewModel } from '../schemas/review.js'
 
 const HOME = 'https://gymbeam.hr/';
 const EVIDENCE = '[MOCK] placeholder evidence — a live run replaces this with a quote from the page';
+
+/** Repo-relative path of the test brief these fixtures belong to. */
+export const FIXTURE_BRIEF = 'packages/core/src/fixtures/brief.yaml';
 
 export const WHEY = 'GymBeam True Whey Protein';
 export const CREATINE = 'GymBeam Creatine Monohydrate';

@@ -2,11 +2,13 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { findRepoRoot } from '../config.js';
+import { FIXTURE_BRIEF } from '../fixtures/index.js';
 import { BriefArtifactSchema, BriefValidationError, DEFAULT_CONSTRAINTS, brandDomains } from '../schemas/brief.js';
 import { briefStage, checkBrandKit, parseBriefYaml } from './01-brief.js';
 import { fakeAi, makeContext, tempDir } from './test-helpers.js';
 
-const EXAMPLE = path.join(findRepoRoot(), 'brief.example.yaml');
+const EXAMPLE = path.join(findRepoRoot(), FIXTURE_BRIEF);
+const DEMO = path.join(findRepoRoot(), 'brief.example.yaml');
 
 const MINIMAL = `
 brand:
@@ -22,14 +24,21 @@ goals: [education]
 `;
 
 describe('parseBriefYaml', () => {
-  it('accepts brief.example.yaml and flags TODO product URLs', () => {
-    const { brief, warnings } = parseBriefYaml(readFileSync(EXAMPLE, 'utf8'));
+  it('accepts the demo brief.example.yaml with product pages on the brand site', () => {
+    const { brief, warnings } = parseBriefYaml(readFileSync(DEMO, 'utf8'));
     expect(brief.brand.slug).toBe('gymbeamhr');
     expect(brief.brand.instagramHandle).toBe('@gymbeamhr');
     expect(brief.products.length).toBeGreaterThanOrEqual(2);
-    expect(brief.products.every((p) => p.url === null)).toBe(true);
-    expect(warnings.some((w) => w.includes('no valid product page URL'))).toBe(true);
+    expect(brief.products.every((p) => p.url?.startsWith('https://gymbeam.hr/'))).toBe(true);
+    expect(warnings).toEqual([]);
     expect(brandDomains(brief)).toEqual(['gymbeam.hr']);
+  });
+
+  it('treats a TODO product URL as not provided and warns', () => {
+    const yaml = readFileSync(EXAMPLE, 'utf8').replace('url: https://gymbeam.hr/protein-wpc-80-gymbeam.html', 'url: "TODO: paste product page URL"');
+    const { brief, warnings } = parseBriefYaml(yaml);
+    expect(brief.products[0]?.url).toBeNull();
+    expect(warnings.some((w) => w.includes('no valid product page URL'))).toBe(true);
   });
 
   it('fills defaults for missing optional fields and accepts snake_case keys', () => {

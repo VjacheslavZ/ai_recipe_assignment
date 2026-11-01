@@ -108,7 +108,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   app.get('/api/example-request', async (_req, reply) => {
     reply.type('text/plain; charset=utf-8');
-    return readFileSync(path.join(config.rootDir, 'brief.example.txt'), 'utf8');
+    // The starting prompt of the demo run (assignment: "specify the starting prompt").
+    return readFileSync(path.join(config.rootDir, 'PROMPT.md'), 'utf8');
   });
 
   // Free-text requests turned into briefs, kept until the run starts so the run records the

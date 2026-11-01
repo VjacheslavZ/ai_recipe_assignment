@@ -30,26 +30,20 @@ market:
 
 # Products to promote (2–3). The analysis stage looks up each product on the
 # official site (page, current price, literal claims). A URL that is not a
-# real http(s) link (e.g. the TODO below) is treated as "not provided" and
+# real http(s) link (e.g. "TODO") is treated as "not provided" and
 # the analysis searches the official site for the product instead.
 products:
   - # VERIFY: exact product name and flavour as shown on gymbeam.hr.
-    name: GymBeam True Whey Protein
-    # VERIFY: paste the official product page URL.
-    url: "TODO: paste product page URL"
-    # File in brand_kit/gymbeamhr/products/ (real packshot, transparent PNG ideal).
-    imageFile: true-whey.png
-    notes: Flagship whey protein; pick one flavour and use the matching packshot.
+    name: GymBeam Protein Fusion
+    url: https://gymbeam.hr/protein-fusion-gymbeam.html
+    # File in brand_kit/gymbeamhr/products/ (added by the author, transparent PNG).
+    imageFile: gymbeam-protein-fusion.png
+    notes: Multi-component protein powder; use the chocolate flavour shown on the packshot.
   - # VERIFY
-    name: GymBeam Creatine Monohydrate
-    url: "TODO: paste product page URL"
-    imageFile: creatine-monohydrate.png
-    notes: Good subject for an educational post; claims only from the product page.
-  - # VERIFY
-    name: GymBeam Protein Bar
-    url: "TODO: paste product page URL"
-    imageFile: protein-bar.png
-    notes: Snack/on-the-go angle; pick one flavour.
+    name: GymBeam 32% Protein Wafer
+    url: https://gymbeam.hr/32-protein-wafer-gymbeam.html
+    imageFile: gymbeam-32-protein-wafer.png
+    notes: Snack/on-the-go angle; claims only from the product page.
 
 # Who the posts are for (free text).
 audience: >-
@@ -59,7 +53,7 @@ audience: >-
 
 # One goal per post is ideal; the plan stage maps them onto posts 1–3.
 goals:
-  - "Education: explain one product category clearly (e.g. what to look for on a creatine label) to earn saves."
+  - "Education: explain one product category clearly (e.g. how to read a protein powder label) to earn saves."
   - "Engagement: spark comments with a simple, on-brand question."
   - "Purchase intent: present a product with a clear call to action to the shop."
 

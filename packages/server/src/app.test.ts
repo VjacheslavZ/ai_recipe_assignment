@@ -9,7 +9,7 @@ import { PendingQuestions, RunEvents, type RunEvent } from './events.js';
 import { JobWorker } from './worker.js';
 
 const root = findRepoRoot();
-const briefYaml = readFileSync(path.join(root, 'brief.example.yaml'), 'utf8');
+const briefYaml = readFileSync(path.join(root, 'packages/core/src/fixtures/brief.yaml'), 'utf8');
 const closers: (() => void)[] = [];
 afterEach(() => closers.splice(0).forEach((c) => c()));
 

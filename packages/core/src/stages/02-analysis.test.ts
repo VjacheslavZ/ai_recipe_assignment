@@ -2,12 +2,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { findRepoRoot } from '../config.js';
-import { BAR, CREATINE, WHEY, instagramFixture, mockFixtures, siteFixture, siteFixtureSources } from '../fixtures/index.js';
+import { BAR, CREATINE, FIXTURE_BRIEF, WHEY, instagramFixture, mockFixtures, siteFixture, siteFixtureSources } from '../fixtures/index.js';
 import { BrandAnalysisSchema, PriceConfirmationSchema, type SiteAnalysisModel } from '../schemas/analysis.js';
 import { parseBriefYaml } from './01-brief.js';
 import { INSTAGRAM_NO_SCREENSHOTS_REASON, confirmPrices, mergeAnalysis, parsePriceAnswer } from './02-analysis.js';
 
-const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), 'brief.example.yaml'), 'utf8'));
+const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), FIXTURE_BRIEF), 'utf8'));
 const NOW = '2026-10-30T12:00:00.000Z';
 
 const merge = (site: SiteAnalysisModel = siteFixture, withInstagram = true) =>

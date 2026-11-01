@@ -6,7 +6,7 @@ import { BrandAnalysisSchema, InstagramAnalysisModelSchema, SiteAnalysisModelSch
 import { ContentPlanModelSchema, ContentPlanSchema } from '../schemas/plan.js';
 import { analysisStage, briefStage, planStage, stages } from '../stages/index.js';
 import { fakeAi, makeContext, tempDir } from '../stages/test-helpers.js';
-import { mockFixtures } from './index.js';
+import { FIXTURE_BRIEF, mockFixtures } from './index.js';
 
 describe('mockFixtures', () => {
   it('pass the model-facing schemas', () => {
@@ -35,7 +35,7 @@ describe('stages 01–03 end to end with fixtures', () => {
 
     const ai = fakeAi(mockFixtures);
     const ctx = makeContext({ ai, brandKitDir: kitDir, ask: async (q) => (q.id.includes('creatine') ? '19.90' : null) });
-    copyFileSync(path.join(findRepoRoot(), 'brief.example.yaml'), ctx.store.path('brief', 'brief.input.yaml'));
+    copyFileSync(path.join(findRepoRoot(), FIXTURE_BRIEF), ctx.store.path('brief', 'brief.input.yaml'));
 
     expect(stages.map((s) => [s.no, s.id])).toEqual([[1, 'brief'], [2, 'analysis'], [3, 'plan'], [4, 'create'], [5, 'review']]);
     await briefStage.run(ctx);

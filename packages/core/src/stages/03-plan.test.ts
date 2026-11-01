@@ -2,14 +2,14 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { findRepoRoot } from '../config.js';
-import { CREATINE, WHEY, instagramFixture, planFixture, siteFixture, siteFixtureSources } from '../fixtures/index.js';
+import { CREATINE, FIXTURE_BRIEF, WHEY, instagramFixture, planFixture, siteFixture, siteFixtureSources } from '../fixtures/index.js';
 import type { BrandAnalysis } from '../schemas/analysis.js';
 import type { ContentPlanModel } from '../schemas/plan.js';
 import { parseBriefYaml } from './01-brief.js';
 import { mergeAnalysis } from './02-analysis.js';
 import { PlanValidationError, validatePlan } from './03-plan.js';
 
-const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), 'brief.example.yaml'), 'utf8'));
+const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), FIXTURE_BRIEF), 'utf8'));
 const analysis: BrandAnalysis = mergeAnalysis({
   brief,
   site: siteFixture,

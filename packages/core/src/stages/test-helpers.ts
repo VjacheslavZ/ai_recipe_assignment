@@ -5,7 +5,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import type { AiCallRecord, AiClient, StructuredRequest } from '../ai/types.js';
 import { findRepoRoot, parseConfig } from '../config.js';
-import { instagramFixture, planFixture, siteFixture, siteFixtureSources } from '../fixtures/index.js';
+import { FIXTURE_BRIEF, instagramFixture, planFixture, siteFixture, siteFixtureSources } from '../fixtures/index.js';
 import type { ContentPlanModel } from '../schemas/plan.js';
 import { checkBrandKit, parseBriefYaml } from './01-brief.js';
 import { mergeAnalysis } from './02-analysis.js';
@@ -70,7 +70,7 @@ export function makeContext(opts: {
  * temp brand kit holding a logo and a photo for the first product that has an image file.
  */
 export async function prepareRunThroughPlan(ai: AiClient) {
-  const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), 'brief.example.yaml'), 'utf8'));
+  const { brief } = parseBriefYaml(readFileSync(path.join(findRepoRoot(), FIXTURE_BRIEF), 'utf8'));
   const brandKitDir = tempDir('kit');
   const kit = path.join(brandKitDir, brief.brand.slug);
   mkdirSync(path.join(kit, 'products'), { recursive: true });
