@@ -17,14 +17,13 @@ Goals, one per post
 2. Engagement: start a conversation with a simple, on-brand question about training snacks, with the Protein Wafer, so people comment. A short story sequence suits this.
 3. Purchase intent: present Protein Fusion (chocolate) with a clear call to action to the shop. A single image suits this.
 
-Visual style: a bright gym
-- Scenes in a modern, well-lit gym: daylight through large windows, light walls and floors, clean equipment (dumbbells, racks, benches, kettlebells, a towel and a shaker on a bench).
-- Bright, even, natural light with soft shadows; fresh and energetic, never dark or gloomy.
-- Avoid low-key lighting, black backgrounds, night scenes, heavy fog or neon. If the brand's feed has darker posts, keep these noticeably lighter while using the brand's colours as accents.
+Visual style: from the brand's Instagram
+- Take the look from the uploaded Instagram screenshots, so the posts keep the brand's identity: the same kind of scenes and settings, lighting, colour palette, composition and the way products are shown.
+- Do not introduce a look of your own; vary the concepts, not the brand style.
 - Leave clean, uncluttered space for the product and the headline.
 
 References and inspiration
-- The brand's own Instagram feed is the main style reference for colours, typography, layouts and how products are shown; the lighting follows the visual style above.
+- The brand's Instagram feed (the uploaded screenshots) is the style reference for scenes, lighting, colours, typography, layouts and how products are shown.
 - The product pages above for packshots and product facts.
 
 Rules
